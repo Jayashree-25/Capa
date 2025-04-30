@@ -37,8 +37,8 @@ A full-stack dashboard designed to visualize team capacity, project timelines, a
 
 1. **Clone the repo**:
    ```bash
-   git clone https://github.com/your-username/project-delivery-dashboard.git
-   cd project-delivery-dashboard
+   git clone https://github.com/rishijeet/capacityops.git
+   cd capacityops
    ```
 
 2. **Backend Setup**:
