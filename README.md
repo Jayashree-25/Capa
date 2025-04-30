@@ -1,4 +1,4 @@
-# 📊 Project Delivery and Capacity Planning Dashboard
+# 📊 CapacityOps
 
 A full-stack dashboard designed to visualize team capacity, project timelines, and roadmap trade-offs. Helps teams **align delivery dates**, **simulate reprioritizations**, and **optimize resource allocation**.
 
