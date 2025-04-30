@@ -1,0 +1,74 @@
+# ===============================================
+# Backend (Node.js) Specific
+# ===============================================
+# Dependencies
+backend/node_modules/
+
+# Logs
+backend/npm-debug.log*
+backend/yarn-debug.log*
+backend/yarn-error.log*
+backend/.pnpm-debug.log*
+
+# Environment variables
+backend/.env
+backend/.env.local
+backend/.env.development
+backend/.env.test
+backend/.env.production
+
+# Build output
+backend/dist/
+backend/coverage/
+
+# Database files
+backend/*.sqlite
+backend/*.db
+
+# ================================================
+# Frontend (React) Specific
+# ================================================
+# Dependencies
+frontend/node_modules/
+
+# Build output
+frontend/build/
+frontend/.next/
+frontend/out/
+
+# Cache
+frontend/.cache/
+
+# Environment variables
+frontend/.env
+frontend/.env.local
+frontend/.env.development
+frontend/.env.production
+
+# Debug logs
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+
+# Testing
+frontend/coverage/
+
+# ================================================
+# General (OS/IDE)
+# ================================================
+# OS junk
+.DS_Store
+Thumbs.db
+
+# IDE/Editor
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Temp files
+*.tmp
+*.bak

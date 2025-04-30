@@ -1,0 +1,78 @@
+{
+  "projects": [
+    {
+      "id": "proj-1",
+      "name": "Dispute Engine",
+      "phases": [
+        {
+          "name": "Discovery",
+          "start": "2025-05-01",
+          "end": "2025-05-15"
+        },
+        {
+          "name": "Build",
+          "start": "2025-05-16",
+          "end": "2025-06-30"
+        }
+      ],
+      "effort": 60,
+      "priority": "High"
+    },
+    {
+      "name": "New Smart Case Module",
+      "phases": [
+        {
+          "name": "Discovery",
+          "start": "2025-07-01",
+          "end": "2025-07-15"
+        },
+        {
+          "name": "Build",
+          "start": "2025-07-16",
+          "end": "2025-09-01"
+        }
+      ],
+      "effort": 80,
+      "priority": "Medium",
+      "id": "proj-1745952783802"
+    },
+    {
+      "name": "New Smart Case Module 1",
+      "phases": [
+        {
+          "name": "Discovery",
+          "start": "2025-07-01",
+          "end": "2025-07-15"
+        },
+        {
+          "name": "Build",
+          "start": "2025-07-16",
+          "end": "2025-09-01"
+        }
+      ],
+      "effort": 100,
+      "priority": "Medium",
+      "id": "proj-1745952996746"
+    }
+  ],
+  "capacity": [
+    {
+      "team": "Backend",
+      "month": "2025-05",
+      "available": 100,
+      "allocated": 60
+    },
+    {
+      "team": "Frontend",
+      "month": "2025-05",
+      "available": 80,
+      "allocated": 40
+    },
+    {
+      "team": "Backend",
+      "month": "2025-07",
+      "available": 120,
+      "allocated": 60
+    }
+  ]
+}
