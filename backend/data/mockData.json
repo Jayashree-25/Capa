@@ -53,6 +53,16 @@
       "effort": 100,
       "priority": "Medium",
       "id": "proj-1745952996746"
+    },
+    {
+      "name": "Maveric",
+      "effort": "30",
+      "priority": "High",
+      "team": "",
+      "month": "",
+      "available": 0,
+      "allocated": 0,
+      "id": "proj-1745986324355"
     }
   ],
   "capacity": [
@@ -73,6 +83,12 @@
       "month": "2025-07",
       "available": 120,
       "allocated": 60
+    },
+    {
+      "team": "Rishijeet",
+      "month": "2025-08",
+      "available": "30",
+      "allocated": "20"
     }
   ]
 }

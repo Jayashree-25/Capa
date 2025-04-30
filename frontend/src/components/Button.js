@@ -1,10 +1,11 @@
 import React from 'react';
 
-export const Button = ({ onClick, children }) => {
+export const Button = ({ onClick, children, type = 'button', className = '' }) => {
   return (
     <button
+      type={type}
       onClick={onClick}
-      className="bg-blue-500 text-white p-2 rounded hover:bg-blue-700 transition duration-200"
+      className={`bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition ${className}`}
     >
       {children}
     </button>

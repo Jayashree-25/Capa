@@ -1,11 +1,11 @@
 import axios from 'axios';
 
-const API = axios.create({
-  baseURL: 'http://localhost:3001/api',  // Backend API URL
-  timeout: 5000,
-});
+const API_BASE = 'http://localhost:3001/api';
 
-export const getProjects = () => API.get('/projects');
-export const getCapacity = () => API.get('/capacity');
-export const addProject = (project) => API.post('/projects', project);
-export const updateCapacity = (capacity) => API.put('/capacity', capacity);
+// Projects
+export const getProjects = () => axios.get(`${API_BASE}/projects`);
+export const addProject = (projectData) => axios.post(`${API_BASE}/projects`, projectData);
+
+// Capacity
+export const getCapacity = () => axios.get(`${API_BASE}/capacity`);
+export const updateCapacity = (capacityData) => axios.put(`${API_BASE}/capacity`, capacityData);
