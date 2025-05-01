@@ -1,3 +1,8 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Sample Tailwind-inspired colors */
+.phase-discovery { background-color: #BFDBFE; }
+.phase-build { background-color: #FDE68A; }
+.phase-testing { background-color: #A7F3D0; }
