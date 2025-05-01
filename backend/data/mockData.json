@@ -1,94 +1,63 @@
 {
   "projects": [
     {
-      "id": "proj-1",
-      "name": "Dispute Engine",
-      "phases": [
-        {
-          "name": "Discovery",
-          "start": "2025-05-01",
-          "end": "2025-05-15"
+      "id": "proj-1746104162091",
+      "name": "E-Commerce Platform",
+      "phases": {
+        "discovery": {
+          "teamMembers": 2,
+          "start": "012024",
+          "end": "032024"
         },
-        {
-          "name": "Build",
-          "start": "2025-05-16",
-          "end": "2025-06-30"
+        "build": {
+          "teamMembers": 5,
+          "start": "042024",
+          "end": "082024"
+        },
+        "testing": {
+          "teamMembers": 3,
+          "start": "092024",
+          "end": "102024"
         }
-      ],
-      "effort": 60,
-      "priority": "High"
+      },
+      "totalTeamMembers": 10,
+      "startDate": "012024",
+      "endDate": "102024"
     },
     {
-      "name": "New Smart Case Module",
-      "phases": [
-        {
-          "name": "Discovery",
-          "start": "2025-07-01",
-          "end": "2025-07-15"
+      "id": "proj-1746109646324",
+      "name": "Mobile App Development",
+      "phases": {
+        "discovery": {
+          "teamMembers": 3,
+          "start": "012024",
+          "end": "022024"
         },
-        {
-          "name": "Build",
-          "start": "2025-07-16",
-          "end": "2025-09-01"
-        }
-      ],
-      "effort": 80,
-      "priority": "Medium",
-      "id": "proj-1745952783802"
-    },
-    {
-      "name": "New Smart Case Module 1",
-      "phases": [
-        {
-          "name": "Discovery",
-          "start": "2025-07-01",
-          "end": "2025-07-15"
+        "build": {
+          "teamMembers": 6,
+          "start": "032024",
+          "end": "062024"
         },
-        {
-          "name": "Build",
-          "start": "2025-07-16",
-          "end": "2025-09-01"
+        "testing": {
+          "teamMembers": 4,
+          "start": "072024",
+          "end": "082024"
         }
-      ],
-      "effort": 100,
-      "priority": "Medium",
-      "id": "proj-1745952996746"
-    },
-    {
-      "name": "Maveric",
-      "effort": "30",
-      "priority": "High",
-      "team": "",
-      "month": "",
-      "available": 0,
-      "allocated": 0,
-      "id": "proj-1745986324355"
+      },
+      "totalTeamMembers": 13,
+      "startDate": "012024",
+      "endDate": "082024"
     }
   ],
-  "capacity": [
+  "capacity": [],
+  "teams": [
     {
-      "team": "Backend",
-      "month": "2025-05",
-      "available": 100,
-      "allocated": 60
+      "name": "Team A",
+      "memberCount": 25
     },
     {
-      "team": "Frontend",
-      "month": "2025-05",
-      "available": 80,
-      "allocated": 40
-    },
-    {
-      "team": "Backend",
-      "month": "2025-07",
-      "available": 120,
-      "allocated": 60
-    },
-    {
-      "team": "Rishijeet",
-      "month": "2025-08",
-      "available": "30",
-      "allocated": "20"
+      "name": "Team B",
+      "memberCount": 5
     }
   ]
 }

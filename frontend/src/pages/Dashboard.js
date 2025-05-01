@@ -3,11 +3,14 @@ import { getProjects, getCapacity, addProject, updateCapacity } from '../service
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { Modal } from '../components/Modal';
+import { RoadmapInsights } from '../components/RoadmapInsights';
+import Heatmap from 'react-heatmap-grid';
 
 const Dashboard = () => {
   const [projects, setProjects] = useState([]);
-  const [capacity, setCapacity] = useState([]);
+  const [capacity, setCapacity] = useState({});
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [isProjectModalOpen, setProjectModalOpen] = useState(false);
   const [isCapacityModalOpen, setCapacityModalOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -19,17 +22,24 @@ const Dashboard = () => {
     available: 0,
     allocated: 0
   });
+  const [timeRange, setTimeRange] = useState('2025-Q3');
+  const [teamFilter, setTeamFilter] = useState('All');
 
   useEffect(() => {
     const fetchData = async () => {
-      const [projectsData, capacityData] = await Promise.all([
-        getProjects(),
-        getCapacity(),
-      ]);
-
-      setProjects(projectsData.data);
-      setCapacity(capacityData.data);
-      setLoading(false);
+      try {
+        const [projectsRes, capacityRes] = await Promise.all([
+          getProjects(),
+          getCapacity()
+        ]);
+        console.log('Capacity API response:', capacityRes.data);
+        setProjects(projectsRes.data || []);
+        setCapacity(capacityRes.data || {});
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
     };
     fetchData();
   }, []);
@@ -50,7 +60,25 @@ const Dashboard = () => {
     }
   };
 
+  // Filter projects/capacity based on selections
+  const filteredProjects = (projects || []).filter(project => 
+    project.team === teamFilter || teamFilter === 'All'
+  );
+  const filteredCapacity = (capacity || {}).teams || [];
+
   if (loading) return <div className="p-4 text-center">Loading...</div>;
+  if (error) return <div className="p-4 text-center">Error: {error}</div>;
+
+  console.log(RoadmapInsights); // Should log the component function
+
+  const capacityData = Object.entries(capacity.teams || capacity).map(([team, months]) => {
+    const latestMonth = Object.keys(months).sort().pop();
+    return {
+      team,
+      available: months[latestMonth]?.available || 0,
+      allocated: months[latestMonth]?.allocated || 0
+    };
+  });
 
   return (
     <div className="p-6 space-y-6">
@@ -65,11 +93,31 @@ const Dashboard = () => {
         </Button>
       </div>
 
+      <div className="flex gap-4 mb-6">
+        <select 
+          value={timeRange} 
+          onChange={(e) => setTimeRange(e.target.value)}
+          className="p-2 border rounded"
+        >
+          <option value="2025-Q3">Q3 2025</option>
+          <option value="2025-Q4">Q4 2025</option>
+        </select>
+        <select
+          value={teamFilter}
+          onChange={(e) => setTeamFilter(e.target.value)}
+          className="p-2 border rounded"
+        >
+          <option value="All">All Teams</option>
+          <option value="Backend">Backend</option>
+          <option value="Frontend">Frontend</option>
+        </select>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>
           <h2 className="text-lg font-semibold mb-2">🗂 Projects</h2>
           <ul className="space-y-2">
-            {projects.map((proj) => (
+            {filteredProjects.map((proj) => (
               <li key={proj.id} className="border rounded p-2 shadow">
                 <div className="font-semibold">{proj.name}</div>
                 <div className="text-sm text-gray-600">
@@ -83,7 +131,7 @@ const Dashboard = () => {
         <Card>
           <h2 className="text-lg font-semibold mb-2">👥 Team Capacity</h2>
           <ul className="space-y-2">
-            {capacity.map((cap, idx) => (
+            {capacityData.map((cap, idx) => (
               <li key={idx} className="border rounded p-2 shadow">
                 <div className="font-semibold">
                   {cap.team} - {cap.month}
@@ -96,6 +144,8 @@ const Dashboard = () => {
           </ul>
         </Card>
       </div>
+
+      <RoadmapInsights projects={filteredProjects} capacity={capacityData} />
 
       {/* Project Modal */}
       <Modal isOpen={isProjectModalOpen} onClose={() => setProjectModalOpen(false)}>
@@ -174,6 +224,28 @@ const Dashboard = () => {
         </form>
       </Modal>
     </div>
+  );
+};
+
+const HeatmapView = ({ capacity }) => {
+  const months = ['Jul 2025', 'Aug 2025', 'Sep 2025'];
+  const teams = Object.keys(capacity);
+
+  const data = teams.map(team => 
+    months.map(month => capacity[team][month]?.allocated / capacity[team][month]?.available || 0)
+  );
+
+  return (
+    <Heatmap
+      xLabels={months}
+      yLabels={teams}
+      data={data}
+      cellStyle={(value) => ({
+        background: `rgb(0, 151, 230, ${Math.min(1, value * 2)})`, // Blue gradient
+        fontSize: "11px",
+      })}
+      cellRender={(value) => `${Math.round(value * 100)}%`}
+    />
   );
 };
 
