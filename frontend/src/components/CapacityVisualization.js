@@ -35,7 +35,7 @@ export const CapacityVisualization = () => {
           >
             {formatDate(month.month)}
             <div className="text-xs text-gray-500">
-              {month.utilization * 100}% utilized
+              {Math.round(month.utilization * 100)}% utilized
             </div>
           </div>
         ))}

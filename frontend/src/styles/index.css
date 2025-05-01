@@ -1,0 +1,121 @@
+/* ====== GLOBAL RESETS ====== */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  /* ====== COLOR VARIABLES ====== */
+  --primary: #4e79a7;
+  --secondary: #6b8e23;
+  --text: #333333;
+  --text-light: #666666;
+  --background: #ffffff;
+  --error: #dc3545;
+}
+
+/* ====== BASE STYLES ====== */
+body {
+  font-family: 'Inter', -apple-system, sans-serif;
+  line-height: 1.6;
+  color: var(--text);
+  background-color: #f5f7fa; /* Light gray background */
+}
+
+/* ====== TYPOGRAPHY ====== */
+h1, h2, h3 {
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+/* ====== UTILITY CLASSES ====== */
+.container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.text-primary {
+  color: var(--primary);
+}
+
+/* ====== COMPONENT STYLES ====== */
+/* Modal Overlay */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+/* Form Elements */
+input, textarea {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  transition: border-color 0.3s;
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+/* ====== ANIMATIONS ====== */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-in;
+}
+
+/* Modal Overlay */
+.ReactModal__Overlay {
+    background: rgba(0, 0, 0, 0.5) !important;
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  /* Modal Content */
+  .ReactModal__Content {
+    position: relative;
+    inset: auto !important;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  /* Smooth transitions */
+.project-card {
+  transition: all 0.2s ease;
+}
+
+/* Gradient header */
+.card-header-gradient {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+}
+
+/* Clamp project name to 1 line */
+.line-clamp-1 {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.progress-bar-fallback {
+  min-height: 12px !important; /* Ensures visibility */
+}
+

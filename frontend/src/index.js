@@ -1,4 +1,5 @@
 import './styles/tailwind.css';
+import './styles/index.css'; // Global styles
 import React from 'react';
 import App from './App';
 
