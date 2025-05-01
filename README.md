@@ -1,12 +1,13 @@
-# 📊 CapacityOps
+# CapacityOps
 
 A full-stack dashboard designed to visualize team capacity, project timelines, and roadmap trade-offs. Helps teams **align delivery dates**, **simulate reprioritizations**, and **optimize resource allocation**.
 
-![Dashboard Preview](https://via.placeholder.com/800x400?text=Dashboard+Screenshot) *(Replace with actual screenshot)*
+<img width="1279" alt="Screenshot 2025-05-02 at 1 39 01 AM" src="https://github.com/user-attachments/assets/894695ab-828a-4a24-830b-591f214971f5" />
+
 
 ---
 
-## 🚀 Features
+## Features
 
 - **Capacity Visualization**: Compare team bandwidth against project demands.
 - **Scenario Simulation**: Model the impact of adding/removing projects mid-year.
@@ -16,7 +17,7 @@ A full-stack dashboard designed to visualize team capacity, project timelines, a
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 | **Frontend**       | **Backend**        | **Tools**               |
 |--------------------|--------------------|-------------------------|
@@ -26,7 +27,7 @@ A full-stack dashboard designed to visualize team capacity, project timelines, a
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 - Node.js ≥ 16
@@ -58,7 +59,7 @@ A full-stack dashboard designed to visualize team capacity, project timelines, a
 
 ---
 
-## 📡 API Endpoints
+## API Endpoints
 
 | **Endpoint**          | **Method** | **Description**                     |
 |-----------------------|------------|-------------------------------------|
@@ -71,7 +72,7 @@ A full-stack dashboard designed to visualize team capacity, project timelines, a
 
 ---
 
-## 🧠 Use Cases
+## Use Cases
 
 1. **Capacity Planning**:  
    *"When can Team A start Project X given their current workload?"*  
@@ -87,7 +88,7 @@ A full-stack dashboard designed to visualize team capacity, project timelines, a
 
 ---
 
-## 📡 Future Plans
+## Future Plans
 
 - **Jira Integration**: Sync projects/sprints automatically using Jira Cloud API.
 - **Advanced Analytics**: Predictive modeling for capacity bottlenecks.
@@ -95,7 +96,7 @@ A full-stack dashboard designed to visualize team capacity, project timelines, a
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 1. Fork the project.
 2. Create a branch (`git checkout -b feature/your-feature`).
