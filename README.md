@@ -2,7 +2,8 @@
 
 A full-stack dashboard designed to visualize team capacity, project timelines, and roadmap trade-offs. Helps teams **align delivery dates**, **simulate reprioritizations**, and **optimize resource allocation**.
 
-<img width="1279" alt="Screenshot 2025-05-02 at 1 39 01 AM" src="https://github.com/user-attachments/assets/894695ab-828a-4a24-830b-591f214971f5" />
+![Untitled](https://github.com/user-attachments/assets/b3526edb-099d-40f6-a7a3-4edcaa8c7836)
+
 
 
 ---
