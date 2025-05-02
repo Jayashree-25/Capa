@@ -7,11 +7,9 @@ import { CreateProjectModal } from '../components/CreateProjectModal';
 import { CapacityVisualization } from '../components/CapacityVisualization';
 import EditProjectModal from '../components/EditProjectModal';
 import { CreateTeamModal } from '../components/CreateTeamModal';
-import { FaPlus, FaUsers, FaProjectDiagram } from 'react-icons/fa';
 import { EditTeamModal } from '../components/EditTeamModal';
 import { CapacityBarChart } from '../components/CapacityBarChart';
 import { ProjectCard } from '../components/ProjectCard';
-import { ProgressBar } from '../components/ProgressBar';
 
 const formatDate = (dateStr) => {
   if (!dateStr) return '';
@@ -25,7 +23,8 @@ const Dashboard = () => {
   const [projects, setProjects] = useState([]);
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [projectsError, setProjectsError] = useState(null);
+  const [teamsError, setTeamsError] = useState(null);
   const [selectedProject, setSelectedProject] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCreateProjectModalOpen, setIsCreateProjectModalOpen] = useState(false);
@@ -39,13 +38,11 @@ const Dashboard = () => {
     const fetchData = async () => {
       try {
         const [projectsRes, teamsRes] = await Promise.all([
-          getProjects().catch(e => ({ data: [] })),
-          getTeams().catch(e => ({ data: [] }))
+          getProjects().catch(e => { setProjectsError(e.message); return { data: [] }; }),
+          getTeams().catch(e => { setTeamsError(e.message); return { data: [] }; })
         ]);
         setProjects(projectsRes.data);
         setTeams(teamsRes.data);
-      } catch (err) {
-        setError(err.message || 'Failed to load data');
       } finally {
         setLoading(false);
       }
@@ -60,6 +57,7 @@ const Dashboard = () => {
 
   const handleCreateSuccess = (newProject) => {
     setProjects([...projects, newProject]);
+    setIsCreateProjectModalOpen(false);
   };
 
   const handleEditSuccess = (updatedProject) => {
@@ -67,13 +65,11 @@ const Dashboard = () => {
   };
 
   const handleEditTeamSuccess = (updatedTeam) => {
-    setTeams(teams.map(t => 
-      t.name === updatedTeam.name ? updatedTeam : t
-    ));
+    setTeams(teams.map(t => t.id === updatedTeam.id ? updatedTeam : t));
   };
 
   if (loading) return <div className="p-4 text-center">Loading...</div>;
-  if (error) return <div className="p-4 text-center text-red-500">Error: {error}</div>;
+  if (projectsError || teamsError) return <div className="p-4 text-center text-red-500">Error: {projectsError || teamsError}</div>;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6 space-y-8">
@@ -158,7 +154,7 @@ const Dashboard = () => {
 
       {/* Project Details Modal */}
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
-        {selectedProject && (
+        {selectedProject ? (
           <div className="space-y-4">
             <h2 className="text-2xl font-bold text-gray-800">{selectedProject.name}</h2>
             <div className="space-y-2">
@@ -198,13 +194,15 @@ const Dashboard = () => {
               </div>
             )}
           </div>
+        ) : (
+          <div>No project selected</div>
         )}
       </Modal>
 
       <CreateProjectModal
         isOpen={isCreateProjectModalOpen}
         onClose={() => setIsCreateProjectModalOpen(false)}
-        onSuccess={handleCreateSuccess}
+        onCreateSuccess={handleCreateSuccess}
       />
 
       <EditProjectModal

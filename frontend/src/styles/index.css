@@ -119,3 +119,11 @@ input:focus {
   min-height: 12px !important; /* Ensures visibility */
 }
 
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+

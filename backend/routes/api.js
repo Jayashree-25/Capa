@@ -328,51 +328,56 @@ router.put('/projects/:id', (req, res) => {
     const { name, phases } = req.body;
     const data = loadData();
 
-    // Find the project
-    const projectIndex = data.projects.findIndex(project => project.id === id);
+    // Debug logging
+    console.log('PUT /projects/', { 
+      id, 
+      name, 
+      phases,
+      existingIds: data.projects.map(p => p.id) 
+    });
+
+    // Find project
+    const projectIndex = data.projects.findIndex(p => p.id === id);
     if (projectIndex === -1) {
-      return res.status(404).json({ error: 'Project not found.' });
+      return res.status(404).json({ 
+        error: `Project ${id} not found`,
+        availableIds: data.projects.map(p => p.id)
+      });
     }
 
-    const project = data.projects[projectIndex];
-
-    // Validate input (if provided)
-    if (name) {
-      if (typeof name !== 'string' || name.trim() === '') {
-        return res.status(400).json({ error: 'Project name must be a non-empty string.' });
-      }
-      project.name = name;
+    // Validate required phases
+    const requiredPhases = ['discovery', 'build', 'testing'];
+    if (!phases || requiredPhases.some(phase => !phases[phase])) {
+      return res.status(400).json({ 
+        error: 'Missing required phases',
+        required: requiredPhases 
+      });
     }
 
-    if (phases) {
-      // Validate phases (must include discovery, build, testing)
-      const requiredPhases = ['discovery', 'build', 'testing'];
-      if (!requiredPhases.every(phase => phases[phase])) {
-        return res.status(400).json({ error: 'All phases (discovery, build, testing) must be provided.' });
-      }
+    // Update project
+    const updatedProject = {
+      ...data.projects[projectIndex],
+      name,
+      phases,
+      totalTeamMembers: requiredPhases.reduce((sum, phase) => sum + phases[phase].teamMembers, 0),
+      startDate: phases.discovery.start,
+      endDate: phases.testing.end
+    };
 
-      // Validate phase dates (MMYYYY format)
-      for (const phase of requiredPhases) {
-        const { start, end, teamMembers } = phases[phase];
-        if (!/^\d{6}$/.test(start) || !/^\d{6}$/.test(end)) {
-          return res.status(400).json({ error: `Phase ${phase} dates must be in MMYYYY format.` });
-        }
-        if (typeof teamMembers !== 'number' || teamMembers <= 0) {
-          return res.status(400).json({ error: `Phase ${phase} teamMembers must be a positive number.` });
-        }
-      }
-
-      // Update phases
-      project.phases = phases;
-      project.totalTeamMembers = requiredPhases.reduce((sum, phase) => sum + phases[phase].teamMembers, 0);
-      project.startDate = phases.discovery.start;
-      project.endDate = phases.testing.end;
-    }
-
+    data.projects[projectIndex] = updatedProject;
     saveData(data);
-    res.json(project);
+
+    // Explicitly set JSON headers
+    res.setHeader('Content-Type', 'application/json');
+    res.json(updatedProject);
+
   } catch (error) {
-    res.status(500).json({ error: `Failed to update project: ${error.message}` });
+    console.error('PUT /projects error:', error);
+    // Ensure error responses are JSON too
+    res.status(500).setHeader('Content-Type', 'application/json').json({ 
+      error: 'Internal server error',
+      details: error.message 
+    });
   }
 });
 

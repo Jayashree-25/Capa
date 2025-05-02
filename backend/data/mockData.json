@@ -10,7 +10,7 @@
           "end": "032024"
         },
         "build": {
-          "teamMembers": 5,
+          "teamMembers": 22,
           "start": "042024",
           "end": "082024"
         },
@@ -20,7 +20,7 @@
           "end": "102024"
         }
       },
-      "totalTeamMembers": 10,
+      "totalTeamMembers": 27,
       "startDate": "012024",
       "endDate": "102024"
     },
@@ -30,34 +30,90 @@
       "phases": {
         "discovery": {
           "teamMembers": 3,
-          "start": "012024",
+          "start": "022024",
           "end": "022024"
         },
         "build": {
           "teamMembers": 6,
           "start": "032024",
-          "end": "062024"
+          "end": "032024"
         },
         "testing": {
           "teamMembers": 4,
-          "start": "072024",
-          "end": "082024"
+          "start": "052024",
+          "end": "072024"
         }
       },
       "totalTeamMembers": 13,
-      "startDate": "012024",
-      "endDate": "082024"
+      "startDate": "022024",
+      "endDate": "072024"
+    },
+    {
+      "id": "proj-1746186227642",
+      "name": "Regulatory Project",
+      "phases": {
+        "discovery": {
+          "start": "032024",
+          "end": "032024",
+          "teamMembers": 2
+        },
+        "build": {
+          "start": "042024",
+          "end": "052024",
+          "teamMembers": 6
+        },
+        "testing": {
+          "start": "062024",
+          "end": "062024",
+          "teamMembers": 2
+        }
+      },
+      "totalTeamMembers": 10,
+      "startDate": "032024",
+      "endDate": "062024"
+    },
+    {
+      "id": "proj-1746190800781",
+      "name": "Compliance Proj",
+      "phases": {
+        "discovery": {
+          "start": "072024",
+          "end": "072024",
+          "teamMembers": 1
+        },
+        "build": {
+          "start": "082024",
+          "end": "082024",
+          "teamMembers": 2
+        },
+        "testing": {
+          "start": "092024",
+          "end": "112024",
+          "teamMembers": 2
+        }
+      },
+      "totalTeamMembers": 5,
+      "startDate": "072024",
+      "endDate": "112024"
     }
   ],
   "capacity": [],
   "teams": [
     {
       "name": "Team A",
-      "memberCount": 25
+      "memberCount": 24
     },
     {
       "name": "Team B",
       "memberCount": 5
+    },
+    {
+      "name": "Team C",
+      "memberCount": 1
+    },
+    {
+      "name": "Team D",
+      "memberCount": 2
     }
   ]
 }

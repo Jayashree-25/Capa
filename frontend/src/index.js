@@ -5,4 +5,4 @@ import App from './App';
 
 // New (React 16)
 import ReactDOM from 'react-dom';
-ReactDOM.render(<App />, document.getElementById('root'));
+ReactDOM.render(<React.StrictMode><App /></React.StrictMode>, document.getElementById('root'));

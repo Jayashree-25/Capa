@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Modal } from './Modal';
 import { Button } from './Button';
+import { Spinner } from './Spinner';
+import PropTypes from 'prop-types';
 
 export const CreateProjectModal = ({
   isOpen,
@@ -20,54 +22,113 @@ export const CreateProjectModal = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [apiError, setApiError] = useState(null);
 
-  const validateForm = () => {
+  const validateForm = useCallback(() => {
     const newErrors = {};
-
+    
+    // Validate project name
     if (!formData.name.trim()) {
       newErrors.name = 'Project name is required';
+    } else if (formData.name.trim().length < 3) {
+      newErrors.name = 'Project name must be at least 3 characters long';
     }
 
     // Validate phases
     Object.entries(formData.phases).forEach(([phase, details]) => {
-      if (!/^\\d{6}$/.test(details.start)) {
-        newErrors[`${phase}Start`] = 'Start date must be in MMYYYY format';
+      // Validate start date
+      if (!details.start.trim()) {
+        newErrors[`${phase}Start`] = 'Start date is required';
+      } else if (!/^(0[1-9]|1[0-2])(20[2-9][0-9]|2[1-9][0-9]{2}|[3-9][0-9]{3})$/.test(details.start)) {
+        newErrors[`${phase}Start`] = 'Start date must be in MMYYYY format (01-12 for month, 2023+ for year)';
       }
-      if (!/^\\d{6}$/.test(details.end)) {
-        newErrors[`${phase}End`] = 'End date must be in MMYYYY format';
+
+      // Validate end date
+      if (!details.end.trim()) {
+        newErrors[`${phase}End`] = 'End date is required';
+      } else if (!/^(0[1-9]|1[0-2])(20[2-9][0-9]|2[1-9][0-9]{2}|[3-9][0-9]{3})$/.test(details.end)) {
+        newErrors[`${phase}End`] = 'End date must be in MMYYYY format (01-12 for month, 2023+ for year)';
       }
+
+      // Validate team members
       if (details.teamMembers < 0) {
         newErrors[`${phase}TeamMembers`] = 'Team members cannot be negative';
+      } else if (details.teamMembers > 100) {
+        newErrors[`${phase}TeamMembers`] = 'Team members cannot exceed 100';
+      }
+
+      // Validate start and end date logic
+      if (details.start && details.end) {
+        const startMonth = parseInt(details.start.substring(0, 2), 10);
+        const startYear = parseInt(details.start.substring(2), 10);
+        const endMonth = parseInt(details.end.substring(0, 2), 10);
+        const endYear = parseInt(details.end.substring(2), 10);
+        
+        if (endYear < startYear || (endYear === startYear && endMonth < startMonth)) {
+          newErrors[`${phase}End`] = 'End date must be in or after the start month';
+        }
       }
     });
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  };
+  }, [formData]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
+    
+    // Block duplicate submissions
+    if (isSubmitting) {
+      console.warn('Submission already in progress');
+      return;
+    }
+    
     if (!validateForm()) return;
 
     setIsSubmitting(true);
     setApiError(null);
 
     try {
+      const payload = {
+        name: formData.name.trim(),
+        phases: {
+          discovery: {
+            start: formData.phases.discovery.start,
+            end: formData.phases.discovery.end,
+            teamMembers: Number(formData.phases.discovery.teamMembers)
+          },
+          build: {
+            start: formData.phases.build.start,
+            end: formData.phases.build.end,
+            teamMembers: Number(formData.phases.build.teamMembers)
+          },
+          testing: {
+            start: formData.phases.testing.start,
+            end: formData.phases.testing.end,
+            teamMembers: Number(formData.phases.testing.teamMembers)
+          }
+        }
+      };
+      console.log('Submitting payload:', payload); // Debug log
+      
       const response = await fetch('http://localhost:3001/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(payload)
       });
 
       if (!response.ok) {
-        throw new Error('Failed to create project');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Server error: ${response.status}`);
       }
 
       const newProject = await response.json();
-      onCreateSuccess(newProject);
+      console.log('Server response:', newProject);
+      
+      if (onCreateSuccess) onCreateSuccess(newProject);
       resetForm();
       onClose();
+      
     } catch (err) {
+      console.error('Submission failed:', err);
       setApiError(err.message);
     } finally {
       setIsSubmitting(false);
@@ -105,27 +166,33 @@ export const CreateProjectModal = ({
     setApiError(null);
   };
 
+  const handleClose = () => {
+    if (validateForm()) {
+      onClose();
+    }
+  };
+
   return (
-    <Modal 
-      isOpen={isOpen} 
-      onClose={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4" // Full-screen overlay
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
+      disableClose={isSubmitting}
+      ariaLabel="Create new project"
     >
       <div className="w-full max-w-md mx-auto bg-white rounded-lg shadow-xl overflow-hidden">
-        {/* Modal Header */}
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b">
           <h2 className="text-xl font-semibold text-gray-800">Create Project</h2>
         </div>
 
-        {/* Modal Body */}
         <div className="p-6 space-y-4">
           {apiError && (
-            <div className="mb-4 p-2 bg-red-100 text-red-700 rounded">
-              {apiError}
+            <div className="mb-4 p-2 bg-red-100 text-red-700 rounded flex justify-between">
+              <span>{apiError}</span>
+              <button onClick={() => setApiError(null)}>✕</button>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} id="project-form" className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Project Name *
@@ -148,7 +215,7 @@ export const CreateProjectModal = ({
                     <label className="block text-sm text-gray-600 mb-1">Start (MMYYYY) *</label>
                     <input
                       type="text"
-                      placeholder="012024"
+                      placeholder="MMYYYY (e.g., 022023)"
                       className={`w-full p-2 border rounded ${errors[`${phase}Start`] ? 'border-red-500' : ''}`}
                       value={formData.phases[phase].start}
                       onChange={(e) => handlePhaseChange(phase, 'start', e.target.value)}
@@ -161,7 +228,7 @@ export const CreateProjectModal = ({
                     <label className="block text-sm text-gray-600 mb-1">End (MMYYYY) *</label>
                     <input
                       type="text"
-                      placeholder="022024"
+                      placeholder="MMYYYY (e.g., 022023)"
                       className={`w-full p-2 border rounded ${errors[`${phase}End`] ? 'border-red-500' : ''}`}
                       value={formData.phases[phase].end}
                       onChange={(e) => handlePhaseChange(phase, 'end', e.target.value)}
@@ -189,14 +256,13 @@ export const CreateProjectModal = ({
           </form>
         </div>
 
-        {/* Modal Footer */}
         <div className="bg-gray-50 px-6 py-4 flex justify-end space-x-3">
           <Button
             onClick={() => {
               resetForm();
               onClose();
             }}
-            className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-100"
+            className="px-4 py-2 text-white bg-gray-600 border border-gray-600 rounded-md hover:bg-gray-700 transition-colors"
           >
             Cancel
           </Button>
@@ -206,10 +272,17 @@ export const CreateProjectModal = ({
             className="px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700"
             disabled={isSubmitting}
           >
-            {isSubmitting ? 'Creating...' : 'Create Project'}
+            {isSubmitting ? <Spinner className="mr-2" /> : null}
+            {isSubmitting ? 'Creating...' : 'Create'}
           </Button>
         </div>
       </div>
     </Modal>
   );
+};
+
+CreateProjectModal.propTypes = {
+  isOpen: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
+  onCreateSuccess: PropTypes.func.isRequired
 };
