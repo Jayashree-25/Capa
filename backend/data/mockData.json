@@ -115,5 +115,151 @@
       "name": "Team D",
       "memberCount": 2
     }
+  ],
+  "people": [
+    {
+      "id": "p-1786518542300",
+      "name": "Jayashree",
+      "team": "Backend",
+      "weeklyCapacity": 40
+    },
+    {
+      "id": "p-1786518762118",
+      "name": "Akansha",
+      "team": "Frontend",
+      "weeklyCapacity": 30
+    },
+    {
+      "id": "p-1786519073510",
+      "name": "Ankit",
+      "team": "Backend",
+      "weeklyCapacity": 40
+    },
+    {
+      "id": "p-1786519182540",
+      "name": "John",
+      "team": "Testing",
+      "weeklyCapacity": 40
+    },
+    {
+      "id": "p-1786519196590",
+      "name": "William",
+      "team": "Testing",
+      "weeklyCapacity": 40
+    }
+  ],
+  "tasks": [
+    {
+      "id": "t-1786518843164",
+      "title": "Landing page",
+      "projectId": "proj-1746104162091",
+      "assigneeId": "p-1786518762118",
+      "estimatedHours": 5,
+      "week": "2026-08-17"
+    },
+    {
+      "id": "t-1786519037854",
+      "title": "Real time Chat Application",
+      "projectId": "proj-1746104162091",
+      "assigneeId": "p-1786518542300",
+      "estimatedHours": 8,
+      "week": "2026-08-10"
+    },
+    {
+      "id": "t-1786519131208",
+      "title": "Api Integeration",
+      "projectId": "proj-1746104162091",
+      "assigneeId": "p-1786519073510",
+      "estimatedHours": 4,
+      "week": "2026-08-10"
+    },
+    {
+      "id": "t-1786519308580",
+      "title": "Authentication & Users",
+      "projectId": "proj-1746104162091",
+      "assigneeId": "p-1786518542300",
+      "estimatedHours": 5,
+      "week": "2026-08-10"
+    },
+    {
+      "id": "t-1786519360565",
+      "title": "Orders & Payments",
+      "projectId": "proj-1746104162091",
+      "assigneeId": "p-1786519073510",
+      "estimatedHours": 10,
+      "week": "2026-08-17"
+    },
+    {
+      "id": "t-1786519388175",
+      "title": "Notifications",
+      "projectId": "proj-1746104162091",
+      "assigneeId": "p-1786519073510",
+      "estimatedHours": 5,
+      "week": "2026-08-10"
+    },
+    {
+      "id": "t-1786519430789",
+      "title": "Admin Backend",
+      "projectId": "proj-1746104162091",
+      "assigneeId": "p-1786518542300",
+      "estimatedHours": 15,
+      "week": "2026-08-17"
+    },
+    {
+      "id": "t-1786519467511",
+      "title": "Admin Backend UI",
+      "projectId": "proj-1746104162091",
+      "assigneeId": "p-1786518762118",
+      "estimatedHours": 6,
+      "week": "2026-08-10"
+    },
+    {
+      "id": "t-1786519549199",
+      "title": "Security",
+      "projectId": "proj-1746104162091",
+      "assigneeId": "p-1786518542300",
+      "estimatedHours": 10,
+      "week": "2026-08-10"
+    },
+    {
+      "id": "t-1786519608885",
+      "title": "Business Logic",
+      "projectId": "proj-1746104162091",
+      "assigneeId": "p-1786518542300",
+      "estimatedHours": 6,
+      "week": "2026-08-17"
+    },
+    {
+      "id": "t-1786519629446",
+      "title": "Business Logic",
+      "projectId": "proj-1746104162091",
+      "assigneeId": "p-1786519073510",
+      "estimatedHours": 6,
+      "week": "2026-08-17"
+    },
+    {
+      "id": "t-1786519684109",
+      "title": "Wishlist & Reviews",
+      "projectId": "proj-1746104162091",
+      "assigneeId": "p-1786518762118",
+      "estimatedHours": 10,
+      "week": "2026-08-10"
+    },
+    {
+      "id": "t-1786519719966",
+      "title": "Orders Page UI",
+      "projectId": "proj-1746104162091",
+      "assigneeId": "p-1786518762118",
+      "estimatedHours": 10,
+      "week": "2026-08-10"
+    },
+    {
+      "id": "t-1786527928519",
+      "title": "Login UI",
+      "projectId": "proj-1746104162091",
+      "assigneeId": "p-1786518762118",
+      "estimatedHours": 8,
+      "week": "2026-08-10"
+    }
   ]
 }
