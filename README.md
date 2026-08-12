@@ -1,39 +1,37 @@
 # CapacityOps
 
-A full-stack dashboard designed to visualize team capacity, project timelines, and roadmap trade-offs. Helps teams **align delivery dates**, **simulate reprioritizations**, and **optimize resource allocation**.
+A full-stack capacity planner for managing **who** is working on **what** — and **whether they're overloaded**.
 
-![Untitled](https://github.com/user-attachments/assets/b3526edb-099d-40f6-a7a3-4edcaa8c7836)
-
-
+Track team members, assign tasks with estimated hours per week, and instantly see who is over their weekly capacity (e.g. 40 hrs/week). Reassign work between people with simple drag-and-drop.
 
 ---
 
 ## Features
 
-- **Capacity Visualization**: Compare team bandwidth against project demands.
-- **Scenario Simulation**: Model the impact of adding/removing projects mid-year.
-- **Roadmap Alignment**: Identify scheduling conflicts and delivery bottlenecks.
-- **API-Driven**: Programmatically adjust projects and capacity via REST API.
-- **Future**: Jira integration for real-time sprint data (planned).
+- **Per-person workload**: assign tasks (with estimated hours) to people, bucketed by week or month.
+- **Capacity vs. assigned hours**: each person's total assigned hours is compared against their weekly capacity (40h default, configurable per person).
+- **Overload indicators**: red cells + "Overloaded" badges wherever assigned hours exceed capacity (amber when ≥ 80%).
+- **Filters**: by team, by project, and by time period (week or month view with prev/next navigation).
+- **Drag-and-drop reassignment**: drag a task chip onto another person's row (or the Unassigned group) to move it.
+- **API-driven**: full REST API for people, projects, tasks, and the load report.
 
 ---
 
 ## Tech Stack
 
-| **Frontend**       | **Backend**        | **Tools**               |
-|--------------------|--------------------|-------------------------|
-| React 18           | Node.js + Express  | Axios (HTTP client)     |
-| Tailwind CSS       | REST API           | Postman (Testing)       |
-| Recharts (or similar) | PostgreSQL/MongoDB | Jira API (Planned)      |
+| **Frontend**            | **Backend**        | **Storage**         |
+|-------------------------|--------------------|---------------------|
+| React 16                | Node.js + Express 5 | JSON file (`backend/data/mockData.json`) |
+| Tailwind CSS v3         | REST API           | Axios (HTTP client) |
+| Native HTML5 drag & drop | Helmet / CORS / rate limiting | — |
 
 ---
 
 ## Getting Started
 
 ### Prerequisites
-- Node.js ≥ 16
-- PostgreSQL (or MongoDB) for backend
-- npm/yarn
+- Node.js ≥ 18
+- npm
 
 ### Installation
 
@@ -47,66 +45,77 @@ A full-stack dashboard designed to visualize team capacity, project timelines, a
    ```bash
    cd backend
    npm install
-   cp .env.example .env  # Update with your DB credentials
-   npm start            # Runs on http://localhost:3001
+   cp .env.example .env   # Optional — defaults work out of the box
+   npm start              # Runs on http://localhost:3001
    ```
 
 3. **Frontend Setup**:
    ```bash
    cd ../frontend
    npm install
-   npm start            # Runs on http://localhost:3000
+   cp .env.example .env   # Optional — defaults to http://localhost:3001/api
+   npm start              # Runs on http://localhost:3000
    ```
+
+4. Open **http://localhost:3000**.
 
 ---
 
 ## API Endpoints
 
-| **Endpoint**          | **Method** | **Description**                     |
-|-----------------------|------------|-------------------------------------|
-| `/api/projects`       | GET        | Fetch all projects                  |
-| `/api/projects`       | POST       | Add a new project                   |
-| `/api/capacity`       | GET        | Get team capacity data              |
-| `/api/simulate`       | POST       | Run reprioritization simulations    |
+| **Endpoint**            | **Method** | **Description** |
+|-------------------------|------------|-----------------|
+| `/api/people`           | GET/POST   | List people / add a person (`name`, `team`, `weeklyCapacity`) |
+| `/api/people/:id`       | PUT/DELETE | Update person / delete (blocked while tasks are assigned) |
+| `/api/teams`            | GET        | Distinct team names (for filters) |
+| `/api/projects`         | GET/POST   | List projects / add a project |
+| `/api/projects/:id`     | DELETE     | Delete a project (blocked while tasks reference it) |
+| `/api/tasks`            | GET/POST   | List tasks (with assignee/project names) / add a task |
+| `/api/tasks/:id`        | PUT/DELETE | Update a task (reassign via `assigneeId`) / delete |
+| `/api/reports/load`     | GET        | **Load report** — per-person assigned vs. capacity |
 
-**Test API**: Import the included `Postman_Collection.json` into Postman.
+### Load report query params
+
+`GET /api/reports/load?granularity=week|month&from=YYYY-MM-DD|YYYY-MM&to=...&team=Alpha&project=pr-1`
+
+Returns per person: per-period `assignedHours` vs `capacityHours`, `utilization`, `overloaded` flag, totals for the range, and a `teamTotals` row.
+
+- Week granularity: capacity = `weeklyCapacity` per week.
+- Month granularity: capacity = `weeklyCapacity` × number of weeks (Mondays) in that month.
 
 ---
 
-## Use Cases
+## Testing
 
-1. **Capacity Planning**:  
-   *"When can Team A start Project X given their current workload?"*  
-   → Use the dashboard to visualize availability.
+```bash
+cd backend
+npm test     # 12 tests (node:test) — runs against a temp data file, never touches your data
+```
 
-2. **Reprioritization**:  
-   *"What happens if we delay Project Y to onboard a high-priority client?"*  
-   → Simulate changes via the API.
+---
 
-3. **Roadmap Conflicts**:  
-   *"Are two critical projects competing for the same team in Q3?"*  
-   → Check the alignment view.
+## Hosting / Deployment
+
+- **Backend**: `npm start` (dev, nodemon) or `npm run start:prod`. Set `PORT`, `FRONTEND_URL` (CORS), and optionally `DATA_FILE` via environment variables.
+- **Frontend**: `npm run build` produces static files in `frontend/build/` — serve from any static host (Netlify, Vercel, S3, nginx). Point `REACT_APP_API_URL` at your deployed backend before building.
+- **Note**: the JSON file store is single-instance. For multi-instance production, swap `backend/lib/store.js` for a real database.
+
+---
+
+## Demo Data
+
+Seeded with 8 people across 3 teams, 5 projects, and ~30 tasks spread over recent weeks — including some intentionally overloaded people (Alice, Carol, Eva, Frank) so the overload indicators are visible immediately.
 
 ---
 
 ## Future Plans
 
-- **Jira Integration**: Sync projects/sprints automatically using Jira Cloud API.
-- **Advanced Analytics**: Predictive modeling for capacity bottlenecks.
-- **Role-Based Views**: Tailor dashboards for PMs, Engineers, and Leadership.
+- **Jira Integration**: sync tasks/people from Jira (`backend/services/jiraServices.js` stub).
+- **Advanced Analytics**: trend lines and bottleneck prediction.
+- **Role-Based Views**: tailor dashboards for PMs, Engineers, and Leadership.
 
 ---
 
-## Contributing
+## License
 
-1. Fork the project.
-2. Create a branch (`git checkout -b feature/your-feature`).
-3. Commit changes (`git commit -m 'Add some feature'`).
-4. Push to the branch (`git push origin feature/your-feature`).
-5. Open a PR.
-
----
-
-## 📄 License
-
-MIT. See `LICENSE` for details.
+MIT.
