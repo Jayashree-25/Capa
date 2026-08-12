@@ -1,232 +1,401 @@
-import React, { useEffect, useState } from 'react';
-import { getProjects, getTeams } from '../services/api';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
-import { Modal } from '../components/Modal';
-import { CreateProjectModal } from '../components/CreateProjectModal';
-import { CapacityVisualization } from '../components/CapacityVisualization';
-import EditProjectModal from '../components/EditProjectModal';
-import { CreateTeamModal } from '../components/CreateTeamModal';
-import { EditTeamModal } from '../components/EditTeamModal';
-import { CapacityBarChart } from '../components/CapacityBarChart';
-import { ProjectCard } from '../components/ProjectCard';
+import { Spinner } from '../components/Spinner';
+import PersonFormModal from '../components/PersonFormModal';
+import ProjectFormModal from '../components/ProjectFormModal';
+import TaskFormModal from '../components/TaskFormModal';
+import {
+  getPeople, getProjects, getTasks, getTeamNames, getLoadReport,
+  updateTask, deleteTask, deletePerson
+} from '../services/api';
+import {
+  todayMonday, firstOfMonth, addWeeks, addMonths, buildBuckets,
+  formatWeekLabel, formatMonthLabel, toISO
+} from '../utils/dateUtils';
 
-const formatDate = (dateStr) => {
-  if (!dateStr) return '';
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const month = parseInt(dateStr.substring(0, 2)) - 1;
-  const year = dateStr.substring(2);
-  return `${months[month]} ${year}`;
+const WEEK_COUNT = 6;
+const MONTH_COUNT = 3;
+
+const cellStyle = (bucket) => {
+  if (bucket.overloaded) return 'bg-red-100 text-red-800 border-red-300';
+  if (bucket.utilization >= 0.8) return 'bg-amber-100 text-amber-800 border-amber-300';
+  return 'bg-green-50 text-green-800 border-green-200';
+};
+
+const TASK_DRAG_TYPE = 'application/x-capacityops-task';
+
+const getDraggedTaskId = (dataTransfer) => {
+  const custom = dataTransfer.getData(TASK_DRAG_TYPE);
+  if (custom) return custom;
+  const plain = dataTransfer.getData('text/plain');
+  return plain && plain.startsWith('t-') ? plain : null;
 };
 
 const Dashboard = () => {
+  const [people, setPeople] = useState([]);
   const [projects, setProjects] = useState([]);
-  const [teams, setTeams] = useState([]);
+  const [tasks, setTasks] = useState([]);
+  const [teamNames, setTeamNames] = useState([]);
+  const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [projectsError, setProjectsError] = useState(null);
-  const [teamsError, setTeamsError] = useState(null);
-  const [selectedProject, setSelectedProject] = useState(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isCreateProjectModalOpen, setIsCreateProjectModalOpen] = useState(false);
-  const [editingProject, setEditingProject] = useState(null);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isCreateTeamModalOpen, setIsCreateTeamModalOpen] = useState(false);
-  const [editingTeam, setEditingTeam] = useState(null);
-  const [isEditTeamModalOpen, setIsEditTeamModalOpen] = useState(false);
+  const [error, setError] = useState(null);
+
+  const [granularity, setGranularity] = useState('week');
+  const [periodStart, setPeriodStart] = useState(() => todayMonday());
+  const [teamFilter, setTeamFilter] = useState('');
+  const [projectFilter, setProjectFilter] = useState('');
+
+  const [taskModalOpen, setTaskModalOpen] = useState(false);
+  const [personModalOpen, setPersonModalOpen] = useState(false);
+  const [projectModalOpen, setProjectModalOpen] = useState(false);
+  const [dropTarget, setDropTarget] = useState(null);
+
+  const buckets = buildBuckets(granularity, periodStart, granularity === 'week' ? WEEK_COUNT : MONTH_COUNT);
+
+  const refreshReport = useCallback(() => {
+    getLoadReport({
+      granularity,
+      from: buckets[0],
+      to: buckets[buckets.length - 1],
+      team: teamFilter || undefined,
+      project: projectFilter || undefined
+    })
+      .then(res => setReport(res.data))
+      .catch(err => setError(err.response?.data?.error || err.message));
+  }, [granularity, teamFilter, projectFilter, buckets.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [projectsRes, teamsRes] = await Promise.all([
-          getProjects().catch(e => { setProjectsError(e.message); return { data: [] }; }),
-          getTeams().catch(e => { setTeamsError(e.message); return { data: [] }; })
-        ]);
+    Promise.all([
+      getPeople(), getProjects(), getTasks(), getTeamNames()
+    ])
+      .then(([peopleRes, projectsRes, tasksRes, teamsRes]) => {
+        setPeople(peopleRes.data);
         setProjects(projectsRes.data);
-        setTeams(teamsRes.data);
-      } finally {
+        setTasks(tasksRes.data);
+        setTeamNames(teamsRes.data);
         setLoading(false);
-      }
-    };
-    fetchData();
+      })
+      .catch(err => {
+        setError(err.message);
+        setLoading(false);
+      });
   }, []);
 
-  const openProjectModal = (project) => {
-    setSelectedProject(project);
-    setIsModalOpen(true);
+  useEffect(() => {
+    refreshReport();
+  }, [refreshReport]);
+
+  const handleReassign = async (taskId, assigneeId) => {
+    const existing = tasks.find(t => t.id === taskId);
+    if (!existing) return;
+    try {
+      await updateTask(taskId, { assigneeId });
+      setTasks(prev => prev.map(t => {
+        if (t.id !== taskId) return t;
+        const person = people.find(p => p.id === assigneeId);
+        return { ...t, assigneeId, assigneeName: person ? person.name : null };
+      }));
+      refreshReport();
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    }
   };
 
-  const handleCreateSuccess = (newProject) => {
-    setProjects([...projects, newProject]);
-    setIsCreateProjectModalOpen(false);
+  const handleDeleteTask = async (task) => {
+    if (!window.confirm(`Delete task "${task.title}"?`)) return;
+    try {
+      await deleteTask(task.id);
+      setTasks(prev => prev.filter(t => t.id !== task.id));
+      refreshReport();
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    }
   };
 
-  const handleEditSuccess = (updatedProject) => {
-    setProjects(projects.map(p => p.id === updatedProject.id ? updatedProject : p));
+  const handleDeletePerson = async (person) => {
+    if (!window.confirm(`Delete person "${person.name}"? Tasks must be reassigned first.`)) return;
+    try {
+      await deletePerson(person.id);
+      setPeople(prev => prev.filter(p => p.id !== person.id));
+      setTeamNames((await getTeamNames()).data);
+      refreshReport();
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    }
   };
 
-  const handleEditTeamSuccess = (updatedTeam) => {
-    setTeams(teams.map(t => t.id === updatedTeam.id ? updatedTeam : t));
+  const handleCreatedPerson = async (person) => {
+    setPeople(prev => [...prev, person]);
+    setTeamNames((await getTeamNames()).data);
+    refreshReport();
   };
 
-  if (loading) return <div className="p-4 text-center">Loading...</div>;
-  if (projectsError || teamsError) return <div className="p-4 text-center text-red-500">Error: {projectsError || teamsError}</div>;
+  const handleCreatedProject = (project) => setProjects(prev => [...prev, project]);
+
+  const handleCreatedTask = () => {
+    getTasks().then(res => setTasks(res.data));
+    refreshReport();
+  };
+
+  const navigate = (dir) => {
+    setPeriodStart(prev => granularity === 'week' ? addWeeks(prev, dir * WEEK_COUNT) : addMonths(prev, dir * MONTH_COUNT));
+  };
+
+  const rangeLabel = granularity === 'week'
+    ? `${formatWeekLabel(buckets[0])} – ${formatWeekLabel(buckets[buckets.length - 1])}, ${buckets[0].slice(0, 4)}`
+    : `${formatMonthLabel(buckets[0])} – ${formatMonthLabel(buckets[buckets.length - 1])}`;
+
+  const taskGroups = () => {
+    const groups = new Map();
+    groups.set('unassigned', []);
+    for (const p of report ? report.people : []) groups.set(p.id, []);
+    for (const t of tasks) {
+      const key = t.assigneeId && groups.has(t.assigneeId) ? t.assigneeId : 'unassigned';
+      groups.get(key).push(t);
+    }
+    return groups;
+  };
+
+  const overloadedCount = report ? report.people.filter(p => p.overloaded).length : 0;
+  const totalAssigned = report ? report.people.reduce((s, p) => s + p.totalAssignedHours, 0) : 0;
+  const totalCapacity = report ? report.people.reduce((s, p) => s + p.totalCapacityHours, 0) : 0;
+
+  if (loading) return <div className="p-4 text-center flex justify-center"><Spinner /></div>;
+
+  const groups = taskGroups();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6 space-y-8">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6 space-y-6">
+      {error && (
+        <div className="bg-red-100 text-red-800 p-3 rounded flex justify-between">
+          <span>{error}</span>
+          <button onClick={() => setError(null)}>✕</button>
+        </div>
+      )}
+
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-gray-800">Capacity Dashboard</h1>
-        <div className="dashboard-actions">
-          <Button
-            onClick={() => setIsCreateProjectModalOpen(true)}
-            className="btn-simple btn-create-project"
-          >
-            Create Project
-          </Button>
-          <Button
-            onClick={() => setIsCreateTeamModalOpen(true)}
-            className="btn-simple btn-create-team"
-          >
-            Create Team
-          </Button>
+        <h1 className="text-3xl font-bold text-gray-800">Capacity Planner</h1>
+        <div className="space-x-2">
+          <Button onClick={() => setTaskModalOpen(true)} className="bg-green-600 hover:bg-green-700">+ Add Task</Button>
+          <Button onClick={() => setPersonModalOpen(true)}>+ Add Person</Button>
+          <Button onClick={() => setProjectModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700">+ Add Project</Button>
         </div>
       </div>
 
-      <CapacityVisualization />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card><div className="text-sm text-gray-500">People in view</div><div className="text-2xl font-bold">{report ? report.people.length : 0}</div></Card>
+        <Card>
+          <div className="text-sm text-gray-500">Overloaded (any period)</div>
+          <div className={`text-2xl font-bold ${overloadedCount > 0 ? 'text-red-600' : 'text-green-600'}`}>
+            {overloadedCount} {overloadedCount > 0 && '⚠'}
+          </div>
+        </Card>
+        <Card><div className="text-sm text-gray-500">Assigned in range</div><div className="text-2xl font-bold">{totalAssigned}h</div></Card>
+        <Card><div className="text-sm text-gray-500">Available in range</div><div className="text-2xl font-bold">{Math.max(0, totalCapacity - totalAssigned)}h</div></Card>
+      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Projects (Left) */}
-        <Card className="p-6 lg:col-span-1">
-          <h2 className="text-2xl font-semibold mb-6 text-gray-700">Projects ({projects.length})</h2>
-          {projects.length > 0 ? (
-            <div className="space-y-4">
-              {projects.map((project) => (
-                <ProjectCard 
-                  key={project.id}
-                  project={project}
-                  onClick={() => openProjectModal(project)}
-                  onEdit={() => {
-                    setEditingProject(project);
-                    setIsEditModalOpen(true);
+      <Card>
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex rounded border border-gray-300 overflow-hidden">
+            {['week', 'month'].map(mode => (
+              <button
+                key={mode}
+                onClick={() => {
+                  setGranularity(mode);
+                  setPeriodStart(mode === 'week' ? todayMonday() : firstOfMonth(new Date()));
+                }}
+                className={`px-4 py-2 capitalize ${granularity === mode ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button onClick={() => navigate(-1)} className="px-3 py-1.5 border rounded hover:bg-gray-100">‹</button>
+            <span className="font-medium min-w-[180px] text-center">{rangeLabel}</span>
+            <button onClick={() => navigate(1)} className="px-3 py-1.5 border rounded hover:bg-gray-100">›</button>
+          </div>
+
+          <select
+            value={teamFilter}
+            onChange={(e) => setTeamFilter(e.target.value)}
+            className="p-2 border rounded"
+          >
+            <option value="">All teams</option>
+            {teamNames.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+
+          <select
+            value={projectFilter}
+            onChange={(e) => setProjectFilter(e.target.value)}
+            className="p-2 border rounded"
+          >
+            <option value="">All projects</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
+      </Card>
+
+      <Card>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse min-w-[900px]">
+            <thead>
+              <tr className="bg-gray-50">
+                <th className="text-left p-2 border-b-2 border-gray-200">Person</th>
+                <th className="text-left p-2 border-b-2 border-gray-200">Team</th>
+                <th className="text-right p-2 border-b-2 border-gray-200">Cap/wk</th>
+                {buckets.map(key => (
+                  <th key={key} className="text-center p-2 border-b-2 border-gray-200">
+                    {granularity === 'week' ? formatWeekLabel(key) : formatMonthLabel(key)}
+                  </th>
+                ))}
+                <th className="text-right p-2 border-b-2 border-gray-200">Total</th>
+                <th className="text-center p-2 border-b-2 border-gray-200">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report && report.people.map(person => (
+                <tr
+                  key={person.id}
+                  onDragOver={(e) => { e.preventDefault(); setDropTarget(person.id); }}
+                  onDragLeave={() => setDropTarget(prev => prev === person.id ? null : prev)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setDropTarget(null);
+                    const taskId = getDraggedTaskId(e.dataTransfer);
+                    if (taskId) handleReassign(taskId, person.id);
                   }}
-                />
-              ))}
-            </div>
-          ) : (
-            <p className="text-gray-500 italic">No projects found</p>
-          )}
-        </Card>
-
-        {/* Teams (Middle) */}
-        <Card className="p-6 lg:col-span-1">
-          <h2 className="text-2xl font-semibold mb-6 text-gray-700">Teams ({teams.length})</h2>
-          {teams.length > 0 ? (
-            <div className="grid grid-cols-1 gap-4">
-              {teams.map((team) => (
-                <Card key={team.name} className="p-4 hover:shadow-md transition-shadow duration-300">
-                  <div className="flex justify-between items-start">
-                    <h3 className="font-bold text-lg text-gray-800">{team.name}</h3>
-                    <button
-                      onClick={() => {
-                        setEditingTeam(team);
-                        setIsEditTeamModalOpen(true);
-                      }}
-                      className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                    >
-                      Edit
-                    </button>
-                  </div>
-                  <p className="mt-2 text-sm text-gray-600">
-                    Members: <span className="font-medium">{team.memberCount || 0}</span>
-                  </p>
-                </Card>
-              ))}
-            </div>
-          ) : (
-            <p className="text-gray-500 italic">No teams found</p>
-          )}
-        </Card>
-
-        {/* Capacity Bar Chart (Right) */}
-        <div className="lg:col-span-1">
-          <CapacityBarChart />
-        </div>
-      </div>
-
-      {/* Project Details Modal */}
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
-        {selectedProject ? (
-          <div className="space-y-4">
-            <h2 className="text-2xl font-bold text-gray-800">{selectedProject.name}</h2>
-            <div className="space-y-2">
-              <p><span className="font-medium">Team:</span> {selectedProject.team || 'Unassigned'}</p>
-              {selectedProject.effort && <p><span className="font-medium">Effort:</span> {selectedProject.effort} hrs</p>}
-              {selectedProject.priority && (
-                <p><span className="font-medium">Priority:</span> <span className="capitalize">{selectedProject.priority.toLowerCase()}</span></p>
-              )}
-              {selectedProject.startDate && selectedProject.endDate && (
-                <div>
-                  <p className="font-medium">Timeline:</p>
-                  <p>Start: {formatDate(selectedProject.startDate)}</p>
-                  <p>End: {formatDate(selectedProject.endDate)}</p>
-                </div>
-              )}
-            </div>
-            {selectedProject.phases && (
-              <div className="mt-4">
-                <h3 className="text-xl font-semibold mb-2">Phases</h3>
-                <div className="space-y-3">
-                  {Object.entries(selectedProject.phases).map(([phaseName, phaseDetails]) => (
-                    <div key={phaseName} className="space-y-1">
-                      <div className="flex justify-between">
-                        <span className="font-medium capitalize">{phaseName}</span>
-                        <span>{formatDate(phaseDetails.start)} - {formatDate(phaseDetails.end)}</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div 
-                          className="bg-blue-500 h-2 rounded-full" 
-                          style={{ width: `${phaseDetails.progress || 0}%` }}
-                        ></div>
-                      </div>
-                      <p className="text-sm text-gray-500">Team members: {phaseDetails.teamMembers}</p>
+                  className={`border-b border-gray-100 ${person.overloaded ? 'bg-red-50' : ''} ${dropTarget === person.id ? 'bg-blue-100 ring-2 ring-blue-400' : ''}`}
+                >
+                  <td className="p-2 font-medium">
+                    <div className="flex items-center gap-2">
+                      <span>{person.name}</span>
+                      {person.overloaded && <span className="text-xs bg-red-600 text-white px-2 py-0.5 rounded-full">Overloaded</span>}
+                      <button
+                        onClick={() => handleDeletePerson(person)}
+                        className="text-gray-300 hover:text-red-500"
+                        title="Delete person"
+                      >✕</button>
                     </div>
+                  </td>
+                  <td className="p-2 text-gray-600">{person.team}</td>
+                  <td className="p-2 text-right">{person.weeklyCapacity}h</td>
+                  {person.buckets.map(bucket => (
+                    <td key={bucket.key} className={`p-1.5 text-center border rounded m-0 ${cellStyle(bucket)}`}>
+                      <span className="font-semibold">{bucket.assignedHours}h</span>
+                      {granularity === 'week' && (
+                        <span className="block text-[10px] opacity-70">of {bucket.capacityHours}h</span>
+                      )}
+                    </td>
+                  ))}
+                  <td className={`p-2 text-right font-semibold ${person.totalAssignedHours > person.totalCapacityHours ? 'text-red-600' : ''}`}>
+                    {person.totalAssignedHours}h
+                  </td>
+                  <td className="p-2 text-center">
+                    {person.overloaded
+                      ? <span className="inline-block bg-red-600 text-white text-xs px-2 py-1 rounded-full">Overloaded</span>
+                      : <span className="inline-block bg-green-600 text-white text-xs px-2 py-1 rounded-full">OK</span>}
+                  </td>
+                </tr>
+              ))}
+              {report && (
+                <tr className="bg-gray-50 font-medium">
+                  <td className="p-2" colSpan="3">Team total</td>
+                  {report.teamTotals.map(bucket => (
+                    <td key={bucket.key} className={`p-2 text-center ${bucket.overloaded ? 'text-red-600' : ''}`}>
+                      {bucket.assignedHours}/{bucket.capacityHours}h
+                    </td>
+                  ))}
+                  <td className="p-2 text-right">{totalAssigned}h</td>
+                  <td className="p-2 text-center">
+                    {report.teamTotals.some(b => b.overloaded)
+                      ? <span className="inline-block bg-red-600 text-white text-xs px-2 py-1 rounded-full">Overloaded</span>
+                      : <span className="inline-block bg-green-600 text-white text-xs px-2 py-1 rounded-full">OK</span>}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-xs text-gray-400 mt-2">Drag a task chip below onto a person's row to reassign it.</p>
+      </Card>
+
+      <Card>
+        <h2 className="text-xl font-semibold mb-4">Tasks</h2>
+        <div className="space-y-4">
+          {[...groups.keys()].map(key => {
+            const groupTasks = groups.get(key);
+            if (groupTasks.length === 0) return null;
+            const person = key === 'unassigned' ? null : (report ? report.people.find(p => p.id === key) : null);
+            return (
+              <div
+                key={key}
+                onDragOver={(e) => { e.preventDefault(); setDropTarget(key === 'unassigned' ? 'unassigned' : key); }}
+                onDragLeave={() => setDropTarget(null)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const taskId = getDraggedTaskId(e.dataTransfer);
+                  setDropTarget(null);
+                  if (taskId) handleReassign(taskId, key === 'unassigned' ? null : key);
+                }}
+                className={`rounded-lg p-3 ${dropTarget === key ? 'bg-blue-100 ring-2 ring-blue-400' : 'bg-gray-50'}`}
+              >
+                <h3 className="font-medium text-gray-700 mb-2">
+                  {person ? person.name : 'Unassigned'}
+                  <span className="ml-2 text-xs text-gray-400">{groupTasks.length} task(s)</span>
+                  {person && <span className="ml-2 text-xs text-gray-400">{person.team}</span>}
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {groupTasks.map(task => (
+                    <span
+                      key={task.id}
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData(TASK_DRAG_TYPE, task.id);
+                        e.dataTransfer.setData('text/plain', task.id);
+                      }}
+                      className="inline-flex items-center gap-2 bg-white border border-gray-300 rounded-full px-3 py-1 text-sm cursor-grab hover:border-blue-400"
+                      title="Drag to another person to reassign"
+                    >
+                      <span className="text-gray-400">⋮⋮</span>
+                      <span className="font-medium">{task.title}</span>
+                      <span className="text-xs text-gray-500">{task.projectName}</span>
+                      <span className="text-xs text-blue-600 font-semibold">{task.estimatedHours}h</span>
+                      <span className="text-xs text-gray-400">{formatWeekLabel(task.week)}</span>
+                      <button
+                        onClick={() => handleDeleteTask(task)}
+                        className="text-gray-300 hover:text-red-500 ml-1"
+                        title="Delete task"
+                      >✕</button>
+                    </span>
                   ))}
                 </div>
               </div>
-            )}
-          </div>
-        ) : (
-          <div>No project selected</div>
-        )}
-      </Modal>
+            );
+          })}
+        </div>
+      </Card>
 
-      <CreateProjectModal
-        isOpen={isCreateProjectModalOpen}
-        onClose={() => setIsCreateProjectModalOpen(false)}
-        onCreateSuccess={handleCreateSuccess}
+      <TaskFormModal
+        isOpen={taskModalOpen}
+        onClose={() => setTaskModalOpen(false)}
+        onCreated={handleCreatedTask}
+        people={people}
+        projects={projects}
+        currentMonday={toISO(todayMonday())}
       />
-
-      <EditProjectModal
-        project={editingProject}
-        isOpen={isEditModalOpen}
-        onClose={() => setIsEditModalOpen(false)}
-        onSuccess={handleEditSuccess}
+      <PersonFormModal
+        isOpen={personModalOpen}
+        onClose={() => setPersonModalOpen(false)}
+        onCreated={handleCreatedPerson}
+        teams={teamNames}
       />
-
-      <CreateTeamModal
-        isOpen={isCreateTeamModalOpen}
-        onClose={() => setIsCreateTeamModalOpen(false)}
-        onSuccess={() => {
-          // Refresh teams after creating a new team
-          // This is a placeholder implementation. You might want to implement a proper refresh logic
-          // based on your application's requirements
-        }}
-      />
-
-      <EditTeamModal
-        team={editingTeam}
-        isOpen={isEditTeamModalOpen}
-        onClose={() => setIsEditTeamModalOpen(false)}
-        onSuccess={handleEditTeamSuccess}
+      <ProjectFormModal
+        isOpen={projectModalOpen}
+        onClose={() => setProjectModalOpen(false)}
+        onCreated={handleCreatedProject}
       />
     </div>
   );
