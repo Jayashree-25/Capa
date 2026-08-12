@@ -1,4 +1,4 @@
-# CapacityOps
+# Capa
 
 A full-stack capacity planner for managing **who** is working on **what** — and **whether they're overloaded**.
 
@@ -37,8 +37,8 @@ Track team members, assign tasks with estimated hours per week, and instantly se
 
 1. **Clone the repo**:
    ```bash
-   git clone https://github.com/rishijeet/capacityops.git
-   cd capacityops
+   git clone https://github.com/Jayashree-25/Capa.git
+   cd capa
    ```
 
 2. **Backend Setup**:

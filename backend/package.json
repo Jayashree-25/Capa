@@ -1,5 +1,5 @@
 {
-  "name": "backend",
+  "name": "capa-backend",
   "version": "1.0.0",
   "main": "app.js",
   "scripts": {

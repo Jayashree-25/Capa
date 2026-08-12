@@ -23,7 +23,7 @@ const cellStyle = (bucket) => {
   return 'bg-green-50 text-green-800 border-green-200';
 };
 
-const TASK_DRAG_TYPE = 'application/x-capacityops-task';
+const TASK_DRAG_TYPE = 'application/x-capa-task';
 
 const getDraggedTaskId = (dataTransfer) => {
   const custom = dataTransfer.getData(TASK_DRAG_TYPE);

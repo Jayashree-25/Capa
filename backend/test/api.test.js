@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { setDataFile } = require('../lib/store');
 
-const tmpFile = path.join(os.tmpdir(), `capacityops-test-${Date.now()}.json`);
+const tmpFile = path.join(os.tmpdir(), `capa-test-${Date.now()}.json`);
 fs.writeFileSync(tmpFile, JSON.stringify({
   people: [
     { id: 'p-1', name: 'Alice', team: 'Alpha', weeklyCapacity: 40 },
