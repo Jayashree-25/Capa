@@ -1,433 +1,406 @@
 const express = require('express');
 const router = express.Router();
-const fs = require('fs');
-const path = require('path');
+const { loadData, saveData } = require('../lib/store');
 
-const dataPath = path.join(__dirname, '../data/mockData.json');
+// ---------- Date helpers (week-based, ISO) ----------
+const toISODate = (d) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
 
-// Helper: Load and save JSON data
-const loadData = () => JSON.parse(fs.readFileSync(dataPath));
-const saveData = (data) => fs.writeFileSync(dataPath, JSON.stringify(data, null, 2));
+// Normalize any date to the Monday of its week
+const getMonday = (d) => {
+  const copy = new Date(d);
+  copy.setHours(0, 0, 0, 0);
+  const day = copy.getDay(); // 0 = Sun
+  const diff = day === 0 ? -6 : 1 - day;
+  copy.setDate(copy.getDate() + diff);
+  return copy;
+};
 
-// --- Teams Endpoints (Updated to use mockData.json) ---
-/**
- * POST /api/teams
- * Adds a new team to mockData.json.
- */
-router.post('/teams', (req, res) => {
+const addDays = (d, days) => {
+  const copy = new Date(d);
+  copy.setDate(copy.getDate() + days);
+  return copy;
+};
+
+const addMonths = (d, months) => {
+  const copy = new Date(d);
+  copy.setMonth(copy.getMonth() + months, 1);
+  return copy;
+};
+
+// Accepts an ISO date (YYYY-MM-DD) or week label; returns Monday's ISO date or null
+const parseWeek = (weekStr) => {
+  if (typeof weekStr !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(weekStr)) return null;
+  const d = new Date(`${weekStr}T00:00:00`);
+  if (isNaN(d.getTime())) return null;
+  return getMonday(d);
+};
+
+const monthKeyOfIso = (iso) => iso.slice(0, 7);
+
+const parseMonth = (monthStr) => {
+  if (typeof monthStr !== 'string' || !/^\d{4}-\d{2}(-\d{2})?$/.test(monthStr)) return null;
+  return monthStr.slice(0, 7);
+};
+
+// Number of Mondays within a YYYY-MM month
+const mondaysInMonth = (monthKey) => {
+  const [year, month] = monthKey.split('-').map(Number);
+  let count = 0;
+  const first = new Date(year, month - 1, 1);
+  let cursor = getMonday(first);
+  while (cursor < first) cursor = addDays(cursor, 7);
+  while (cursor.getFullYear() === year && cursor.getMonth() === month - 1) {
+    count += 1;
+    cursor = addDays(cursor, 7);
+  }
+  return count;
+};
+
+// ---------- Validators ----------
+const validatePersonInput = (body) => {
+  const { name, team, weeklyCapacity } = body || {};
+  if (!name || typeof name !== 'string' || name.trim() === '') {
+    return 'Person name is required and must be a non-empty string.';
+  }
+  if (!team || typeof team !== 'string' || team.trim() === '') {
+    return 'Team is required and must be a non-empty string.';
+  }
+  const capacity = weeklyCapacity === undefined ? 40 : weeklyCapacity;
+  if (typeof capacity !== 'number' || !Number.isFinite(capacity) || capacity <= 0 || capacity > 168) {
+    return 'Weekly capacity must be a positive number (hours per week, max 168).';
+  }
+  return null;
+};
+
+const validateTaskInput = (body, data) => {
+  const { title, projectId, assigneeId, estimatedHours, week } = body || {};
+  if (!title || typeof title !== 'string' || title.trim() === '') {
+    return 'Task title is required and must be a non-empty string.';
+  }
+  if (typeof estimatedHours !== 'number' || !Number.isFinite(estimatedHours) || estimatedHours <= 0) {
+    return 'Estimated hours must be a positive number.';
+  }
+  if (!data.projects.some(p => p.id === projectId)) {
+    return 'Project does not exist.';
+  }
+  if (assigneeId !== null && assigneeId !== undefined && !data.people.some(p => p.id === assigneeId)) {
+    return 'Assignee does not exist.';
+  }
+  const monday = parseWeek(week);
+  if (!monday) {
+    return 'Week must be a valid date (YYYY-MM-DD); it is normalized to the Monday of that week.';
+  }
+  return null;
+};
+
+// ---------- People ----------
+router.get('/people', (req, res) => {
   try {
-    const data = loadData();
-    
-    // Initialize teams array if missing
-    if (!data.teams) {
-      data.teams = [];
-    }
-
-    const { name, memberCount } = req.body;
-
-    // Validate input
-    if (!name || typeof name !== 'string' || name.trim() === '') {
-      return res.status(400).json({ error: 'Team name is required and must be a non-empty string.' });
-    }
-
-    if (typeof memberCount !== 'number' || memberCount <= 0) {
-      return res.status(400).json({ error: 'Member count must be a positive number.' });
-    }
-
-    // Check for duplicates
-    if (data.teams.some(team => team.name.toLowerCase() === name.toLowerCase())) {
-      return res.status(409).json({ error: 'A team with this name already exists.' });
-    }
-
-    // Add the team
-    const newTeam = { name, memberCount };
-    data.teams.push(newTeam);
-    saveData(data);
-
-    res.status(201).json({ message: 'Team added successfully.', team: newTeam });
+    res.json(loadData().people);
   } catch (error) {
-    res.status(500).json({ error: `Failed to add team: ${error.message}` });
+    res.status(500).json({ error: `Failed to fetch people: ${error.message}` });
   }
 });
 
-/**
- * GET /api/teams
- * Lists all teams from mockData.json.
- */
+router.post('/people', (req, res) => {
+  try {
+    const error = validatePersonInput(req.body);
+    if (error) return res.status(400).json({ error });
+
+    const data = loadData();
+    const newPerson = {
+      id: `p-${Date.now()}`,
+      name: req.body.name.trim(),
+      team: req.body.team.trim(),
+      weeklyCapacity: req.body.weeklyCapacity === undefined ? 40 : req.body.weeklyCapacity
+    };
+    data.people.push(newPerson);
+    saveData(data);
+    res.status(201).json(newPerson);
+  } catch (err) {
+    res.status(500).json({ error: `Failed to add person: ${err.message}` });
+  }
+});
+
+router.put('/people/:id', (req, res) => {
+  try {
+    const data = loadData();
+    const index = data.people.findIndex(p => p.id === req.params.id);
+    if (index === -1) return res.status(404).json({ error: 'Person not found.' });
+
+    const merged = { ...data.people[index], ...req.body };
+    const error = validatePersonInput(merged);
+    if (error) return res.status(400).json({ error });
+
+    data.people[index] = {
+      id: data.people[index].id,
+      name: merged.name.trim(),
+      team: merged.team.trim(),
+      weeklyCapacity: merged.weeklyCapacity
+    };
+    saveData(data);
+    res.json(data.people[index]);
+  } catch (err) {
+    res.status(500).json({ error: `Failed to update person: ${err.message}` });
+  }
+});
+
+router.delete('/people/:id', (req, res) => {
+  try {
+    const data = loadData();
+    const index = data.people.findIndex(p => p.id === req.params.id);
+    if (index === -1) return res.status(404).json({ error: 'Person not found.' });
+
+    if (data.tasks.some(t => t.assigneeId === req.params.id)) {
+      return res.status(409).json({ error: 'Cannot delete: tasks are still assigned to this person. Reassign or delete those tasks first.' });
+    }
+
+    const deleted = data.people.splice(index, 1)[0];
+    saveData(data);
+    res.json({ message: 'Person deleted successfully.', person: deleted });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to delete person: ${err.message}` });
+  }
+});
+
+// Distinct team names (for filter dropdowns)
 router.get('/teams', (req, res) => {
   try {
-    const data = loadData();
-    res.json(data.teams || []); // Handle missing teams field
-  } catch (error) {
-    res.status(500).json({ error: `Failed to fetch teams: ${error.message}` });
+    const teams = [...new Set(loadData().people.map(p => p.team))].sort();
+    res.json(teams);
+  } catch (err) {
+    res.status(500).json({ error: `Failed to fetch teams: ${err.message}` });
   }
 });
 
-// --- GET Projects (with calculated fields) ---
+// ---------- Projects ----------
 router.get('/projects', (req, res) => {
   try {
-    const data = loadData();
-    if (!data.projects) throw new Error("'projects' field missing in data");
-
-    const formattedProjects = data.projects.map(project => {
-      // Calculate total team members and validate phases
-      const totalTeamMembers = ['discovery', 'build', 'testing'].reduce(
-        (sum, phase) => sum + (project.phases[phase]?.teamMembers || 0), 0
-      );
-
-      return {
-        id: project.id,
-        name: project.name,
-        phases: project.phases,
-        totalTeamMembers,
-        startDate: project.phases.discovery.start, // Project start = discovery start
-        endDate: project.phases.testing.end       // Project end = testing end
-      };
-    });
-
-    res.json(formattedProjects);
+    res.json(loadData().projects);
   } catch (error) {
     res.status(500).json({ error: `Failed to fetch projects: ${error.message}` });
   }
 });
 
-// --- POST New Project (with 3 fixed phases) ---
 router.post('/projects', (req, res) => {
   try {
-    const { name, phases } = req.body;
-
-    // Validate input
+    const { name } = req.body || {};
     if (!name || typeof name !== 'string' || name.trim() === '') {
       return res.status(400).json({ error: 'Project name is required and must be a non-empty string.' });
     }
-
-    // Validate phases (must include discovery, build, testing)
-    const requiredPhases = ['discovery', 'build', 'testing'];
-    if (!phases || !requiredPhases.every(phase => phases[phase])) {
-      return res.status(400).json({ error: 'All phases (discovery, build, testing) must be provided.' });
-    }
-
-    // Validate phase dates (MMYYYY format)
-    for (const phase of requiredPhases) {
-      const { start, end, teamMembers } = phases[phase];
-      if (!/^\d{6}$/.test(start) || !/^\d{6}$/.test(end)) {
-        return res.status(400).json({ error: `Phase ${phase} dates must be in MMYYYY format.` });
-      }
-      if (typeof teamMembers !== 'number' || teamMembers <= 0) {
-        return res.status(400).json({ error: `Phase ${phase} teamMembers must be a positive number.` });
-      }
-    }
-
-    // Convert MMYYYY to Date objects for sorting/validation
-    const parsePhaseDate = (mmYYYY) => {
-      const month = parseInt(mmYYYY.substring(0, 2), 10) - 1; // JS months are 0-indexed
-      const year = parseInt(mmYYYY.substring(2), 10);
-      return new Date(year, month);
-    };
-
-    // Check phase order (discovery → build → testing)
-    const discoveryEnd = parsePhaseDate(phases.discovery.end);
-    const buildStart = parsePhaseDate(phases.build.start);
-    const buildEnd = parsePhaseDate(phases.build.end);
-    const testingStart = parsePhaseDate(phases.testing.start);
-
-    if (buildStart < discoveryEnd || testingStart < buildEnd) {
-      return res.status(400).json({ error: 'Phases must be sequential: discovery → build → testing.' });
-    }
-
-    // Save the project
     const data = loadData();
-    const newProject = {
-      id: `proj-${Date.now()}`,
-      name,
-      phases,
-      // Auto-calculated fields (for GET response)
-      totalTeamMembers: requiredPhases.reduce((sum, phase) => sum + phases[phase].teamMembers, 0),
-      startDate: phases.discovery.start,
-      endDate: phases.testing.end
-    };
+    const newProject = { id: `pr-${Date.now()}`, name: name.trim() };
     data.projects.push(newProject);
     saveData(data);
-
     res.status(201).json(newProject);
-  } catch (error) {
-    res.status(500).json({ error: `Failed to create project: ${error.message}` });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to add project: ${err.message}` });
   }
 });
 
-// --- GET Capacity (Auto-calculated from Projects + Teams) ---
-router.get('/capacity', (req, res) => {
-  try {
-    const data = loadData();
-    const { projects } = data;
-
-    const monthlyAllocations = {};
-    const monthlyDetails = {};
-
-    projects.forEach(project => {
-      const { name, phases } = project;
-      Object.entries(phases).forEach(([phaseName, phase]) => {
-        const { teamMembers, start, end } = phase;
-        const startDate = parseMMYYYY(start);
-        const endDate = parseMMYYYY(end);
-
-        let currentDate = new Date(startDate);
-        while (currentDate <= endDate) {
-          const monthKey = formatMMYYYY(currentDate);
-
-          // Initialize month entry if missing
-          if (!monthlyAllocations[monthKey]) {
-            monthlyAllocations[monthKey] = { allocated: 0 };
-            monthlyDetails[monthKey] = [];
-          }
-
-          // Add project/phase if it's active in this month
-          monthlyDetails[monthKey].push({
-            project: name,
-            phase: phaseName,
-            teamMembers,
-            start,
-            end
-          });
-
-          monthlyAllocations[monthKey].allocated += teamMembers;
-          currentDate.setMonth(currentDate.getMonth() + 1);
-        }
-      });
-    });
-
-    // Calculate unallocated members (total team members - allocated)
-    const totalTeamMembers = data.teams.reduce((sum, team) => sum + team.memberCount, 0);
-    const capacityReport = Object.entries(monthlyAllocations).map(([month, stats]) => ({
-      month,
-      allocated: stats.allocated,
-      unallocated: Math.max(0, totalTeamMembers - stats.allocated), // Prevent negative values
-      utilization: (stats.allocated / totalTeamMembers).toFixed(2)
-    }));
-
-    // Sort months in ascending order for BOTH details and summary
-    const sortMonths = (a, b) => {
-      const dateA = parseInt(a.slice(2) + a.slice(0, 2)); // Convert MMYYYY to YYYYMM
-      const dateB = parseInt(b.slice(2) + b.slice(0, 2));
-      return dateA - dateB;
-    };
-
-    // 1. Sort details
-    const sortedDetails = {};
-    Object.keys(monthlyDetails)
-      .sort(sortMonths)
-      .forEach(key => {
-        sortedDetails[key] = monthlyDetails[key];
-      });
-
-    // 2. Sort summary months
-    const sortedMonths = capacityReport.sort((a, b) => sortMonths(a.month, b.month));
-
-    res.json({
-      summary: {
-        totalTeamMembers,
-        months: sortedMonths // Now sorted
-      },
-      details: sortedDetails
-    });
-  } catch (error) {
-    res.status(500).json({ error: `Failed to calculate capacity: ${error.message}` });
-  }
-});
-
-// Helper: Convert MMYYYY string to Date
-const parseMMYYYY = (mmYYYY) => {
-  const month = parseInt(mmYYYY.substring(0, 2), 10) - 1;
-  const year = parseInt(mmYYYY.substring(2), 10);
-  return new Date(year, month);
-};
-
-// Helper: Format Date as MMYYYY
-const formatMMYYYY = (date) => {
-  const month = (date.getMonth() + 1).toString().padStart(2, '0');
-  const year = date.getFullYear();
-  return `${month}${year}`;
-};
-
-// --- PUT Update Capacity ---
-router.put('/capacity', (req, res) => {
-  try {
-    const { team, month, available, allocated } = req.body;
-    const data = loadData();
-    const index = data.capacity.findIndex(
-      (c) => c.team === team && c.month === month
-    );
-
-    const updatedEntry = { 
-      team, 
-      month, 
-      available, 
-      allocated,
-      lastUpdated: new Date().toISOString()  // Add timestamp
-    };
-
-    if (index !== -1) {
-      data.capacity[index] = updatedEntry;
-    } else {
-      data.capacity.push(updatedEntry);
-    }
-
-    saveData(data);
-    res.json(updatedEntry);
-  } catch (error) {
-    res.status(400).json({ error: "Invalid capacity data" });
-  }
-});
-
-// --- Temporary: Reset Teams (for testing) ---
-router.delete('/teams', (req, res) => {
-  const data = loadData();
-  data.teams = [];
-  saveData(data);
-  res.json({ message: 'All teams cleared.' });
-});
-
-/**
- * PUT /api/teams/:name
- * Updates a team's member count in mockData.json.
- */
-router.put('/teams/:name', (req, res) => {
-  try {
-    const { name } = req.params;
-    const { memberCount } = req.body;
-    const data = loadData();
-
-    // Find the team
-    const teamIndex = data.teams.findIndex(team => team.name.toLowerCase() === name.toLowerCase());
-    if (teamIndex === -1) {
-      return res.status(404).json({ error: 'Team not found.' });
-    }
-
-    // Validate input
-    if (typeof memberCount !== 'number' || memberCount <= 0) {
-      return res.status(400).json({ error: 'Member count must be a positive number.' });
-    }
-
-    // Update the team
-    data.teams[teamIndex].memberCount = memberCount;
-    saveData(data);
-
-    res.json({ message: 'Team updated successfully.', team: data.teams[teamIndex] });
-  } catch (error) {
-    res.status(500).json({ error: `Failed to update team: ${error.message}` });
-  }
-});
-
-/**
- * PUT /api/projects/:id
- * Updates an existing project in mockData.json.
- */
-router.put('/projects/:id', (req, res) => {
-  try {
-    const { id } = req.params;
-    const { name, phases } = req.body;
-    const data = loadData();
-
-    // Debug logging
-    console.log('PUT /projects/', { 
-      id, 
-      name, 
-      phases,
-      existingIds: data.projects.map(p => p.id) 
-    });
-
-    // Find project
-    const projectIndex = data.projects.findIndex(p => p.id === id);
-    if (projectIndex === -1) {
-      return res.status(404).json({ 
-        error: `Project ${id} not found`,
-        availableIds: data.projects.map(p => p.id)
-      });
-    }
-
-    // Validate required phases
-    const requiredPhases = ['discovery', 'build', 'testing'];
-    if (!phases || requiredPhases.some(phase => !phases[phase])) {
-      return res.status(400).json({ 
-        error: 'Missing required phases',
-        required: requiredPhases 
-      });
-    }
-
-    // Update project
-    const updatedProject = {
-      ...data.projects[projectIndex],
-      name,
-      phases,
-      totalTeamMembers: requiredPhases.reduce((sum, phase) => sum + phases[phase].teamMembers, 0),
-      startDate: phases.discovery.start,
-      endDate: phases.testing.end
-    };
-
-    data.projects[projectIndex] = updatedProject;
-    saveData(data);
-
-    // Explicitly set JSON headers
-    res.setHeader('Content-Type', 'application/json');
-    res.json(updatedProject);
-
-  } catch (error) {
-    console.error('PUT /projects error:', error);
-    // Ensure error responses are JSON too
-    res.status(500).setHeader('Content-Type', 'application/json').json({ 
-      error: 'Internal server error',
-      details: error.message 
-    });
-  }
-});
-
-/**
- * DELETE /api/teams/:name
- * Deletes a team from mockData.json.
- */
-router.delete('/teams/:name', (req, res) => {
-  try {
-    const { name } = req.params;
-    const data = loadData();
-
-    // Find the team
-    const teamIndex = data.teams.findIndex(team => team.name.toLowerCase() === name.toLowerCase());
-    if (teamIndex === -1) {
-      return res.status(404).json({ error: 'Team not found.' });
-    }
-
-    // Remove the team
-    const deletedTeam = data.teams.splice(teamIndex, 1)[0];
-    saveData(data);
-
-    res.json({ message: 'Team deleted successfully.', team: deletedTeam });
-  } catch (error) {
-    res.status(500).json({ error: `Failed to delete team: ${error.message}` });
-  }
-});
-
-/**
- * DELETE /api/projects/:id
- * Deletes a project from mockData.json.
- */
 router.delete('/projects/:id', (req, res) => {
   try {
-    const { id } = req.params;
     const data = loadData();
+    const index = data.projects.findIndex(p => p.id === req.params.id);
+    if (index === -1) return res.status(404).json({ error: 'Project not found.' });
 
-    // Find the project
-    const projectIndex = data.projects.findIndex(project => project.id === id);
-    if (projectIndex === -1) {
-      return res.status(404).json({ error: 'Project not found.' });
+    if (data.tasks.some(t => t.projectId === req.params.id)) {
+      return res.status(409).json({ error: 'Cannot delete: tasks still reference this project.' });
     }
 
-    // Remove the project
-    const deletedProject = data.projects.splice(projectIndex, 1)[0];
+    const deleted = data.projects.splice(index, 1)[0];
     saveData(data);
+    res.json({ message: 'Project deleted successfully.', project: deleted });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to delete project: ${err.message}` });
+  }
+});
 
-    res.json({ message: 'Project deleted successfully.', project: deletedProject });
+// ---------- Tasks ----------
+router.get('/tasks', (req, res) => {
+  try {
+    const data = loadData();
+    const peopleById = Object.fromEntries(data.people.map(p => [p.id, p]));
+    const projectsById = Object.fromEntries(data.projects.map(p => [p.id, p]));
+    const tasks = data.tasks.map(t => ({
+      ...t,
+      assigneeName: t.assigneeId ? (peopleById[t.assigneeId]?.name || null) : null,
+      projectName: projectsById[t.projectId]?.name || null
+    }));
+    res.json(tasks);
   } catch (error) {
-    res.status(500).json({ error: `Failed to delete project: ${error.message}` });
+    res.status(500).json({ error: `Failed to fetch tasks: ${error.message}` });
+  }
+});
+
+router.post('/tasks', (req, res) => {
+  try {
+    const data = loadData();
+    const error = validateTaskInput(req.body, data);
+    if (error) return res.status(400).json({ error });
+
+    const { title, projectId, assigneeId, estimatedHours, week } = req.body;
+    const newTask = {
+      id: `t-${Date.now()}`,
+      title: title.trim(),
+      projectId,
+      assigneeId: assigneeId === undefined ? null : assigneeId,
+      estimatedHours,
+      week: toISODate(parseWeek(week))
+    };
+    data.tasks.push(newTask);
+    saveData(data);
+    res.status(201).json(newTask);
+  } catch (err) {
+    res.status(500).json({ error: `Failed to add task: ${err.message}` });
+  }
+});
+
+router.put('/tasks/:id', (req, res) => {
+  try {
+    const data = loadData();
+    const index = data.tasks.findIndex(t => t.id === req.params.id);
+    if (index === -1) return res.status(404).json({ error: 'Task not found.' });
+
+    const existing = data.tasks[index];
+    const merged = { ...existing, ...req.body };
+    if (merged.week !== undefined) {
+      const parsed = parseWeek(merged.week);
+      if (!parsed) {
+        return res.status(400).json({ error: 'Week must be a valid date (YYYY-MM-DD).' });
+      }
+      merged.week = toISODate(parsed);
+    }
+    const error = validateTaskInput(merged, data);
+    if (error) return res.status(400).json({ error });
+
+    data.tasks[index] = merged;
+    saveData(data);
+    res.json(merged);
+  } catch (err) {
+    res.status(500).json({ error: `Failed to update task: ${err.message}` });
+  }
+});
+
+router.delete('/tasks/:id', (req, res) => {
+  try {
+    const data = loadData();
+    const index = data.tasks.findIndex(t => t.id === req.params.id);
+    if (index === -1) return res.status(404).json({ error: 'Task not found.' });
+    const deleted = data.tasks.splice(index, 1)[0];
+    saveData(data);
+    res.json({ message: 'Task deleted successfully.', task: deleted });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to delete task: ${err.message}` });
+  }
+});
+
+// ---------- Capacity report ----------
+// GET /api/reports/load?granularity=week|month&from=YYYY-MM-DD|YYYY-MM&to=...&team=&project=
+router.get('/reports/load', (req, res) => {
+  try {
+    const data = loadData();
+    const granularity = req.query.granularity === 'month' ? 'month' : 'week';
+    const teamFilter = req.query.team ? String(req.query.team) : null;
+    const projectFilter = req.query.project ? String(req.query.project) : null;
+
+    const now = new Date();
+    let from, to, buckets = [];
+
+    if (granularity === 'week') {
+      const fromMonday = parseWeek(req.query.from) || getMonday(addDays(now, -7 * 5));
+      const toMonday = parseWeek(req.query.to) || getMonday(now);
+      from = toISODate(fromMonday);
+      to = toISODate(toMonday);
+      let cursor = new Date(fromMonday);
+      while (cursor <= toMonday) {
+        buckets.push(toISODate(cursor));
+        cursor = addDays(cursor, 7);
+      }
+    } else {
+      const fromMonth = parseMonth(req.query.from) || new Date(now.getFullYear(), now.getMonth() - 2, 1).toISOString().slice(0, 7);
+      const toMonth = parseMonth(req.query.to) || new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 7);
+      if (fromMonth > toMonth) {
+        return res.status(400).json({ error: '`from` must not be after `to`.' });
+      }
+      from = fromMonth;
+      to = toMonth;
+      let cursor = new Date(`${fromMonth}-01T00:00:00`);
+      const end = new Date(`${toMonth}-01T00:00:00`);
+      while (cursor <= end) {
+        buckets.push(toISODate(cursor).slice(0, 7));
+        cursor = addMonths(cursor, 1);
+      }
+    }
+
+    let people = data.people;
+    if (teamFilter) {
+      people = people.filter(p => (p.team || '').toLowerCase() === teamFilter.toLowerCase());
+    }
+
+    const bucketTaskHours = (p, bucketKey) => {
+      let total = 0;
+      for (const t of data.tasks) {
+        if (t.assigneeId !== p.id) continue;
+        if (projectFilter && t.projectId !== projectFilter) continue;
+        if (granularity === 'week') {
+          if (t.week === bucketKey) total += t.estimatedHours;
+        } else {
+          if (t.week && monthKeyOfIso(t.week) === bucketKey) total += t.estimatedHours;
+        }
+      }
+      return total;
+    };
+
+    const reportPeople = people.map(p => {
+      const bucketsReport = buckets.map(key => {
+        const assignedHours = bucketTaskHours(p, key);
+        const capacityHours = granularity === 'week'
+          ? p.weeklyCapacity
+          : p.weeklyCapacity * mondaysInMonth(key);
+        const utilization = capacityHours > 0 ? assignedHours / capacityHours : (assignedHours > 0 ? 1 : 0);
+        return {
+          key,
+          assignedHours,
+          capacityHours,
+          utilization: Number(utilization.toFixed(3)),
+          overloaded: assignedHours > capacityHours
+        };
+      });
+      const totalAssignedHours = bucketsReport.reduce((s, b) => s + b.assignedHours, 0);
+      const totalCapacityHours = bucketsReport.reduce((s, b) => s + b.capacityHours, 0);
+      return {
+        id: p.id,
+        name: p.name,
+        team: p.team,
+        weeklyCapacity: p.weeklyCapacity,
+        buckets: bucketsReport,
+        totalAssignedHours,
+        totalCapacityHours,
+        utilization: totalCapacityHours > 0 ? Number((totalAssignedHours / totalCapacityHours).toFixed(3)) : 0,
+        overloaded: bucketsReport.some(b => b.overloaded)
+      };
+    });
+
+    const teamTotals = buckets.map(key => {
+      const assigned = reportPeople.reduce((s, p) => s + (p.buckets.find(b => b.key === key)?.assignedHours || 0), 0);
+      const capacity = reportPeople.reduce((s, p) => s + (p.buckets.find(b => b.key === key)?.capacityHours || 0), 0);
+      return {
+        key,
+        assignedHours: assigned,
+        capacityHours: capacity,
+        overloaded: assigned > capacity
+      };
+    });
+
+    res.json({ granularity, from, to, buckets, people: reportPeople, teamTotals });
+  } catch (error) {
+    res.status(500).json({ error: `Failed to calculate load report: ${error.message}` });
   }
 });
 
