@@ -21,9 +21,9 @@ Track team members, assign tasks with estimated hours per week, and instantly se
 
 | **Frontend**            | **Backend**        | **Storage**         |
 |-------------------------|--------------------|---------------------|
-| React 16                | Node.js + Express 5 | JSON file (`backend/data/mockData.json`) |
+| React 16                | Node.js + Express 5 | PostgreSQL (via Docker) |
 | Tailwind CSS v3         | REST API           | Axios (HTTP client) |
-| Native HTML5 drag & drop | Helmet / CORS / rate limiting | — |
+| Native HTML5 drag & drop | Helmet / CORS / rate limiting | `pg` driver + SQL migrations |
 
 ---
 
@@ -41,15 +41,21 @@ Track team members, assign tasks with estimated hours per week, and instantly se
    cd capa
    ```
 
-2. **Backend Setup**:
+2. **Start PostgreSQL** (Docker):
+   ```bash
+   docker compose up -d        # postgres on localhost:5432
+   ```
+
+3. **Backend Setup**:
    ```bash
    cd backend
    npm install
    cp .env.example .env   # Optional — defaults work out of the box
+   npm run db:setup       # apply migrations + seed demo data
    npm start              # Runs on http://localhost:3001
    ```
 
-3. **Frontend Setup**:
+4. **Frontend Setup**:
    ```bash
    cd ../frontend
    npm install
@@ -57,7 +63,7 @@ Track team members, assign tasks with estimated hours per week, and instantly se
    npm start              # Runs on http://localhost:3000
    ```
 
-4. Open **http://localhost:3000**.
+5. Open **http://localhost:3000**.
 
 ---
 
@@ -89,22 +95,22 @@ Returns per person: per-period `assignedHours` vs `capacityHours`, `utilization`
 
 ```bash
 cd backend
-npm test     # 12 tests (node:test) — runs against a temp data file, never touches your data
+npm test     # 12 tests (node:test) — creates a throwaway `capa_test` database, never touches your data
 ```
 
 ---
 
 ## Hosting / Deployment
 
-- **Backend**: `npm start` (dev, nodemon) or `npm run start:prod`. Set `PORT`, `FRONTEND_URL` (CORS), and optionally `DATA_FILE` via environment variables.
+- **Backend**: `npm start` (dev, nodemon) or `npm run start:prod`. Set `PORT`, `FRONTEND_URL` (CORS), and `DATABASE_URL` via environment variables. Apply schema with `npm run db:migrate` and seed demo data with `npm run db:seed`.
 - **Frontend**: `npm run build` produces static files in `frontend/build/` — serve from any static host (Netlify, Vercel, S3, nginx). Point `REACT_APP_API_URL` at your deployed backend before building.
-- **Note**: the JSON file store is single-instance. For multi-instance production, swap `backend/lib/store.js` for a real database.
+- **Database**: the schema lives in `backend/db/migrations/` (SQL, applied by `backend/db/migrate.js`). Foreign keys enforce referential integrity (e.g., deleting a person with assigned tasks is blocked by the database).
 
 ---
 
 ## Demo Data
 
-Seeded with 8 people across 3 teams, 5 projects, and ~30 tasks spread over recent weeks — including some intentionally overloaded people (Alice, Carol, Eva, Frank) so the overload indicators are visible immediately.
+Seeded with 5 people, 4 projects, and 14 tasks from `backend/data/mockData.json` — including intentionally overloaded people so the overload indicators are visible immediately.
 
 ---
 
