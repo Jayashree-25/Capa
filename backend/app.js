@@ -5,6 +5,8 @@ const morgan = require('morgan'); // For request logging
 const helmet = require('helmet'); // Security headers
 const rateLimit = require('express-rate-limit'); // Rate limiting
 const apiRoutes = require('./routes/api');
+const authRoutes = require('./routes/auth');
+const { requireAuth } = require('./middleware/auth');
 
 const app = express();
 
@@ -32,7 +34,12 @@ if (process.env.NODE_ENV !== 'test') {
 app.use(express.json({ limit: '10kb' })); // Reject large payloads
 
 // ===== Routes =====
-app.use('/api', apiRoutes);
+app.use('/api/auth', authRoutes);            // Public: login; register/users are guarded inside
+app.use('/api', requireAuth, apiRoutes);     // Everything else requires a valid token
+
+if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
+  console.warn('WARNING: JWT_SECRET is not set. Set a strong random secret in production.');
+}
 
 // ===== Error Handling =====
 // 404 Handler
