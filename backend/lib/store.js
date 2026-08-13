@@ -25,22 +25,37 @@ const loadData = async () => {
 const saveData = async (data) => {
   const pool = getPool();
   const client = await pool.connect();
+  const ids = (arr, key) => (arr || [])
+    .map(item => item[key])
+    .filter(id => id !== undefined && id !== null);
+  const taskIds = ids(data.tasks, 'id');
+  const peopleIds = ids(data.people, 'id');
+  const projectIds = ids(data.projects, 'id');
+
   try {
     await client.query('BEGIN');
-    await client.query('DELETE FROM tasks');
-    await client.query('DELETE FROM people');
-    await client.query('DELETE FROM projects');
+    await client.query('DELETE FROM tasks WHERE id <> ALL($1::text[])', [taskIds]);
+    await client.query('DELETE FROM people WHERE id <> ALL($1::text[])', [peopleIds]);
+    await client.query('DELETE FROM projects WHERE id <> ALL($1::text[])', [projectIds]);
 
     for (const p of data.people || []) {
       await client.query(`
         INSERT INTO people (id, name, team, weekly_capacity, manager_id)
-        VALUES ($1, $2, $3, $4, $5)
+        VALUES ($1, $2, $3, $4, NULL)
         ON CONFLICT (id) DO UPDATE SET
           name = EXCLUDED.name,
           team = EXCLUDED.team,
           weekly_capacity = EXCLUDED.weekly_capacity,
-          manager_id = EXCLUDED.manager_id
-      `, [p.id, p.name, p.team, p.weeklyCapacity, p.managerId ?? null]);
+          manager_id = NULL
+      `, [p.id, p.name, p.team, p.weeklyCapacity]);
+    }
+
+    for (const p of data.people || []) {
+      if (!p.managerId) continue;
+      await client.query(
+        'UPDATE people SET manager_id = $1 WHERE id = $2',
+        [p.managerId, p.id]
+      );
     }
 
     for (const pr of data.projects || []) {
@@ -55,6 +70,12 @@ const saveData = async (data) => {
       await client.query(`
         INSERT INTO tasks (id, title, project_id, assignee_id, estimated_hours, week)
         VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (id) DO UPDATE SET
+          title = EXCLUDED.title,
+          project_id = EXCLUDED.project_id,
+          assignee_id = EXCLUDED.assignee_id,
+          estimated_hours = EXCLUDED.estimated_hours,
+          week = EXCLUDED.week
       `, [t.id, t.title, t.projectId, t.assigneeId ?? null, t.estimatedHours, t.week]);
     }
 
