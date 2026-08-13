@@ -8,18 +8,21 @@
     "start:prod": "node app.js",
     "db:migrate": "node db/migrate.js",
     "db:seed": "node db/seed.js",
-    "db:setup": "node db/migrate.js && node db/seed.js"
+    "db:setup": "node db/migrate.js && node db/seed.js",
+    "create:user": "node db/createUser.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
     "express": "^5.1.0",
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
     "morgan": "^1.10.0",
     "pg": "^8.23.0"
   },
