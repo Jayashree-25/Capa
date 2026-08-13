@@ -14,6 +14,17 @@ Track team members, assign tasks with estimated hours per week, and instantly se
 - **Filters**: by team, by project, and by time period (week or month view with prev/next navigation).
 - **Drag-and-drop reassignment**: drag a task chip onto another person's row (or the Unassigned group) to move it.
 - **API-driven**: full REST API for people, projects, tasks, and the load report.
+- **Auth & roles (RBAC)**: login with email/password (bcrypt + JWT). All API routes (except `/api/auth/login`) require a token; a boss can create users and link them to people.
+
+### Roles & what each can see/do
+
+| Role | Sees | Can do |
+|---|---|---|
+| **boss** | everyone | everything: manage people/projects, add/edit/delete tasks, reassign |
+| **lead** | themselves + everyone below them in the manager tree (`managerId`) | manage people/projects, add/edit/delete tasks, reassign |
+| **engineer** | only themselves and their own tasks | add tasks (assigned to self), update their own tasks; read-only report |
+
+Scoping is enforced server-side (see `backend/lib/scope.js`) — a lead only ever sees their own subtree in people, tasks, teams, and the load report.
 
 ---
 
@@ -55,7 +66,12 @@ Track team members, assign tasks with estimated hours per week, and instantly se
    npm start              # Runs on http://localhost:3001
    ```
 
-4. **Frontend Setup**:
+4. **Create the first user** (a boss, in another terminal):
+   ```bash
+   npm run create:user -- --email boss@example.com --password change-me-123 --role boss
+   ```
+
+5. **Frontend Setup**:
    ```bash
    cd ../frontend
    npm install
@@ -63,7 +79,7 @@ Track team members, assign tasks with estimated hours per week, and instantly se
    npm start              # Runs on http://localhost:3000
    ```
 
-5. Open **http://localhost:3000**.
+6. Open **http://localhost:3000**.
 
 ---
 
@@ -71,14 +87,20 @@ Track team members, assign tasks with estimated hours per week, and instantly se
 
 | **Endpoint**            | **Method** | **Description** |
 |-------------------------|------------|-----------------|
-| `/api/people`           | GET/POST   | List people / add a person (`name`, `team`, `weeklyCapacity`) |
-| `/api/people/:id`       | PUT/DELETE | Update person / delete (blocked while tasks are assigned) |
+| `/api/auth/login`       | POST       | **Public** — login, returns a JWT (`token`) + user |
+| `/api/auth/me`          | GET        | Current user (any authenticated) |
+| `/api/auth/register`    | POST       | Create a user (`email`, `password`, `role`, `personId`) — **boss only** |
+| `/api/auth/users`       | GET        | List users — **boss only** |
+| `/api/people`           | GET/POST   | List people / add a person (`name`, `team`, `weeklyCapacity`, `managerId`) |
+| `/api/people/:id`       | PUT/DELETE | Update person (incl. `managerId`) / delete (blocked while tasks are assigned) |
 | `/api/teams`            | GET        | Distinct team names (for filters) |
 | `/api/projects`         | GET/POST   | List projects / add a project |
 | `/api/projects/:id`     | DELETE     | Delete a project (blocked while tasks reference it) |
 | `/api/tasks`            | GET/POST   | List tasks (with assignee/project names) / add a task |
 | `/api/tasks/:id`        | PUT/DELETE | Update a task (reassign via `assigneeId`) / delete |
 | `/api/reports/load`     | GET        | **Load report** — per-person assigned vs. capacity |
+
+> All endpoints **except** `/api/auth/login` require `Authorization: Bearer <token>`.
 
 ### Load report query params
 
@@ -95,14 +117,14 @@ Returns per person: per-period `assignedHours` vs `capacityHours`, `utilization`
 
 ```bash
 cd backend
-npm test     # 12 tests (node:test) — creates a throwaway `capa_test` database, never touches your data
+npm test     # 19 tests (node:test) — creates a throwaway `capa_test` database, never touches your data
 ```
 
 ---
 
 ## Hosting / Deployment
 
-- **Backend**: `npm start` (dev, nodemon) or `npm run start:prod`. Set `PORT`, `FRONTEND_URL` (CORS), and `DATABASE_URL` via environment variables. Apply schema with `npm run db:migrate` and seed demo data with `npm run db:seed`.
+- **Backend**: `npm start` (dev, nodemon) or `npm run start:prod`. Set `PORT`, `FRONTEND_URL` (CORS), `DATABASE_URL`, and `JWT_SECRET` via environment variables. Apply schema with `npm run db:migrate`, seed demo data with `npm run db:seed`, and create users with `npm run create:user`. The app refuses to start in production without a `JWT_SECRET` warning — set a long random value.
 - **Frontend**: `npm run build` produces static files in `frontend/build/` — serve from any static host (Netlify, Vercel, S3, nginx). Point `REACT_APP_API_URL` at your deployed backend before building.
 - **Database**: the schema lives in `backend/db/migrations/` (SQL, applied by `backend/db/migrate.js`). Foreign keys enforce referential integrity (e.g., deleting a person with assigned tasks is blocked by the database).
 
