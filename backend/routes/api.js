@@ -99,20 +99,20 @@ const validateTaskInput = (body, data) => {
 };
 
 // ---------- People ----------
-router.get('/people', (req, res) => {
+router.get('/people', async (req, res) => {
   try {
-    res.json(loadData().people);
+    res.json((await loadData()).people);
   } catch (error) {
     res.status(500).json({ error: `Failed to fetch people: ${error.message}` });
   }
 });
 
-router.post('/people', (req, res) => {
+router.post('/people', async (req, res) => {
   try {
     const error = validatePersonInput(req.body);
     if (error) return res.status(400).json({ error });
 
-    const data = loadData();
+    const data = await loadData();
     const newPerson = {
       id: `p-${Date.now()}`,
       name: req.body.name.trim(),
@@ -120,16 +120,16 @@ router.post('/people', (req, res) => {
       weeklyCapacity: req.body.weeklyCapacity === undefined ? 40 : req.body.weeklyCapacity
     };
     data.people.push(newPerson);
-    saveData(data);
+    await saveData(data);
     res.status(201).json(newPerson);
   } catch (err) {
     res.status(500).json({ error: `Failed to add person: ${err.message}` });
   }
 });
 
-router.put('/people/:id', (req, res) => {
+router.put('/people/:id', async (req, res) => {
   try {
-    const data = loadData();
+    const data = await loadData();
     const index = data.people.findIndex(p => p.id === req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Person not found.' });
 
@@ -143,16 +143,16 @@ router.put('/people/:id', (req, res) => {
       team: merged.team.trim(),
       weeklyCapacity: merged.weeklyCapacity
     };
-    saveData(data);
+    await saveData(data);
     res.json(data.people[index]);
   } catch (err) {
     res.status(500).json({ error: `Failed to update person: ${err.message}` });
   }
 });
 
-router.delete('/people/:id', (req, res) => {
+router.delete('/people/:id', async (req, res) => {
   try {
-    const data = loadData();
+    const data = await loadData();
     const index = data.people.findIndex(p => p.id === req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Person not found.' });
 
@@ -161,7 +161,7 @@ router.delete('/people/:id', (req, res) => {
     }
 
     const deleted = data.people.splice(index, 1)[0];
-    saveData(data);
+    await saveData(data);
     res.json({ message: 'Person deleted successfully.', person: deleted });
   } catch (err) {
     res.status(500).json({ error: `Failed to delete person: ${err.message}` });
@@ -169,9 +169,9 @@ router.delete('/people/:id', (req, res) => {
 });
 
 // Distinct team names (for filter dropdowns)
-router.get('/teams', (req, res) => {
+router.get('/teams', async (req, res) => {
   try {
-    const teams = [...new Set(loadData().people.map(p => p.team))].sort();
+    const teams = [...new Set((await loadData()).people.map(p => p.team))].sort();
     res.json(teams);
   } catch (err) {
     res.status(500).json({ error: `Failed to fetch teams: ${err.message}` });
@@ -179,33 +179,33 @@ router.get('/teams', (req, res) => {
 });
 
 // ---------- Projects ----------
-router.get('/projects', (req, res) => {
+router.get('/projects', async (req, res) => {
   try {
-    res.json(loadData().projects);
+    res.json((await loadData()).projects);
   } catch (error) {
     res.status(500).json({ error: `Failed to fetch projects: ${error.message}` });
   }
 });
 
-router.post('/projects', (req, res) => {
+router.post('/projects', async (req, res) => {
   try {
     const { name } = req.body || {};
     if (!name || typeof name !== 'string' || name.trim() === '') {
       return res.status(400).json({ error: 'Project name is required and must be a non-empty string.' });
     }
-    const data = loadData();
+    const data = await loadData();
     const newProject = { id: `pr-${Date.now()}`, name: name.trim() };
     data.projects.push(newProject);
-    saveData(data);
+    await saveData(data);
     res.status(201).json(newProject);
   } catch (err) {
     res.status(500).json({ error: `Failed to add project: ${err.message}` });
   }
 });
 
-router.delete('/projects/:id', (req, res) => {
+router.delete('/projects/:id', async (req, res) => {
   try {
-    const data = loadData();
+    const data = await loadData();
     const index = data.projects.findIndex(p => p.id === req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Project not found.' });
 
@@ -214,7 +214,7 @@ router.delete('/projects/:id', (req, res) => {
     }
 
     const deleted = data.projects.splice(index, 1)[0];
-    saveData(data);
+    await saveData(data);
     res.json({ message: 'Project deleted successfully.', project: deleted });
   } catch (err) {
     res.status(500).json({ error: `Failed to delete project: ${err.message}` });
@@ -222,9 +222,9 @@ router.delete('/projects/:id', (req, res) => {
 });
 
 // ---------- Tasks ----------
-router.get('/tasks', (req, res) => {
+router.get('/tasks', async (req, res) => {
   try {
-    const data = loadData();
+    const data = await loadData();
     const peopleById = Object.fromEntries(data.people.map(p => [p.id, p]));
     const projectsById = Object.fromEntries(data.projects.map(p => [p.id, p]));
     const tasks = data.tasks.map(t => ({
@@ -238,9 +238,9 @@ router.get('/tasks', (req, res) => {
   }
 });
 
-router.post('/tasks', (req, res) => {
+router.post('/tasks', async (req, res) => {
   try {
-    const data = loadData();
+    const data = await loadData();
     const error = validateTaskInput(req.body, data);
     if (error) return res.status(400).json({ error });
 
@@ -254,16 +254,16 @@ router.post('/tasks', (req, res) => {
       week: toISODate(parseWeek(week))
     };
     data.tasks.push(newTask);
-    saveData(data);
+    await saveData(data);
     res.status(201).json(newTask);
   } catch (err) {
     res.status(500).json({ error: `Failed to add task: ${err.message}` });
   }
 });
 
-router.put('/tasks/:id', (req, res) => {
+router.put('/tasks/:id', async (req, res) => {
   try {
-    const data = loadData();
+    const data = await loadData();
     const index = data.tasks.findIndex(t => t.id === req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Task not found.' });
 
@@ -280,20 +280,20 @@ router.put('/tasks/:id', (req, res) => {
     if (error) return res.status(400).json({ error });
 
     data.tasks[index] = merged;
-    saveData(data);
+    await saveData(data);
     res.json(merged);
   } catch (err) {
     res.status(500).json({ error: `Failed to update task: ${err.message}` });
   }
 });
 
-router.delete('/tasks/:id', (req, res) => {
+router.delete('/tasks/:id', async (req, res) => {
   try {
-    const data = loadData();
+    const data = await loadData();
     const index = data.tasks.findIndex(t => t.id === req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Task not found.' });
     const deleted = data.tasks.splice(index, 1)[0];
-    saveData(data);
+    await saveData(data);
     res.json({ message: 'Task deleted successfully.', task: deleted });
   } catch (err) {
     res.status(500).json({ error: `Failed to delete task: ${err.message}` });
@@ -302,9 +302,9 @@ router.delete('/tasks/:id', (req, res) => {
 
 // ---------- Capacity report ----------
 // GET /api/reports/load?granularity=week|month&from=YYYY-MM-DD|YYYY-MM&to=...&team=&project=
-router.get('/reports/load', (req, res) => {
+router.get('/reports/load', async (req, res) => {
   try {
-    const data = loadData();
+    const data = await loadData();
     const granularity = req.query.granularity === 'month' ? 'month' : 'week';
     const teamFilter = req.query.team ? String(req.query.team) : null;
     const projectFilter = req.query.project ? String(req.query.project) : null;
