@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { loadData, saveData } = require('../lib/store');
+const { requireRole } = require('../middleware/auth');
+const { getVisiblePersonIds } = require('../lib/scope');
 
 // ---------- Date helpers (week-based, ISO) ----------
 const toISODate = (d) => {
@@ -101,23 +103,32 @@ const validateTaskInput = (body, data) => {
 // ---------- People ----------
 router.get('/people', async (req, res) => {
   try {
-    res.json((await loadData()).people);
+    let people = (await loadData()).people;
+    const visible = await getVisiblePersonIds(req.user);
+    if (visible) people = people.filter(p => visible.includes(p.id));
+    res.json(people);
   } catch (error) {
     res.status(500).json({ error: `Failed to fetch people: ${error.message}` });
   }
 });
 
-router.post('/people', async (req, res) => {
+router.post('/people', requireRole('boss', 'lead'), async (req, res) => {
   try {
     const error = validatePersonInput(req.body);
     if (error) return res.status(400).json({ error });
 
     const data = await loadData();
+    const managerId = req.body.managerId === undefined ? null : req.body.managerId;
+    if (managerId !== null && !data.people.some(p => p.id === managerId)) {
+      return res.status(400).json({ error: 'Manager does not exist.' });
+    }
+
     const newPerson = {
       id: `p-${Date.now()}`,
       name: req.body.name.trim(),
       team: req.body.team.trim(),
-      weeklyCapacity: req.body.weeklyCapacity === undefined ? 40 : req.body.weeklyCapacity
+      weeklyCapacity: req.body.weeklyCapacity === undefined ? 40 : req.body.weeklyCapacity,
+      managerId
     };
     data.people.push(newPerson);
     await saveData(data);
@@ -127,7 +138,7 @@ router.post('/people', async (req, res) => {
   }
 });
 
-router.put('/people/:id', async (req, res) => {
+router.put('/people/:id', requireRole('boss', 'lead'), async (req, res) => {
   try {
     const data = await loadData();
     const index = data.people.findIndex(p => p.id === req.params.id);
@@ -137,11 +148,21 @@ router.put('/people/:id', async (req, res) => {
     const error = validatePersonInput(merged);
     if (error) return res.status(400).json({ error });
 
+    if (merged.managerId !== undefined && merged.managerId !== null) {
+      if (merged.managerId === req.params.id) {
+        return res.status(400).json({ error: 'A person cannot be their own manager.' });
+      }
+      if (!data.people.some(p => p.id === merged.managerId)) {
+        return res.status(400).json({ error: 'Manager does not exist.' });
+      }
+    }
+
     data.people[index] = {
       id: data.people[index].id,
       name: merged.name.trim(),
       team: merged.team.trim(),
-      weeklyCapacity: merged.weeklyCapacity
+      weeklyCapacity: merged.weeklyCapacity,
+      managerId: merged.managerId ?? null
     };
     await saveData(data);
     res.json(data.people[index]);
@@ -150,7 +171,7 @@ router.put('/people/:id', async (req, res) => {
   }
 });
 
-router.delete('/people/:id', async (req, res) => {
+router.delete('/people/:id', requireRole('boss', 'lead'), async (req, res) => {
   try {
     const data = await loadData();
     const index = data.people.findIndex(p => p.id === req.params.id);
@@ -171,7 +192,10 @@ router.delete('/people/:id', async (req, res) => {
 // Distinct team names (for filter dropdowns)
 router.get('/teams', async (req, res) => {
   try {
-    const teams = [...new Set((await loadData()).people.map(p => p.team))].sort();
+    let people = (await loadData()).people;
+    const visible = await getVisiblePersonIds(req.user);
+    if (visible) people = people.filter(p => visible.includes(p.id));
+    const teams = [...new Set(people.map(p => p.team))].sort();
     res.json(teams);
   } catch (err) {
     res.status(500).json({ error: `Failed to fetch teams: ${err.message}` });
@@ -187,7 +211,7 @@ router.get('/projects', async (req, res) => {
   }
 });
 
-router.post('/projects', async (req, res) => {
+router.post('/projects', requireRole('boss', 'lead'), async (req, res) => {
   try {
     const { name } = req.body || {};
     if (!name || typeof name !== 'string' || name.trim() === '') {
@@ -203,7 +227,7 @@ router.post('/projects', async (req, res) => {
   }
 });
 
-router.delete('/projects/:id', async (req, res) => {
+router.delete('/projects/:id', requireRole('boss', 'lead'), async (req, res) => {
   try {
     const data = await loadData();
     const index = data.projects.findIndex(p => p.id === req.params.id);
@@ -227,12 +251,21 @@ router.get('/tasks', async (req, res) => {
     const data = await loadData();
     const peopleById = Object.fromEntries(data.people.map(p => [p.id, p]));
     const projectsById = Object.fromEntries(data.projects.map(p => [p.id, p]));
-    const tasks = data.tasks.map(t => ({
+    let tasks = data.tasks;
+    const visible = await getVisiblePersonIds(req.user);
+    if (visible) {
+      if (req.user.role === 'engineer') {
+        tasks = tasks.filter(t => t.assigneeId === req.user.personId);
+      } else {
+        tasks = tasks.filter(t => !t.assigneeId || visible.includes(t.assigneeId));
+      }
+    }
+    const enriched = tasks.map(t => ({
       ...t,
       assigneeName: t.assigneeId ? (peopleById[t.assigneeId]?.name || null) : null,
       projectName: projectsById[t.projectId]?.name || null
     }));
-    res.json(tasks);
+    res.json(enriched);
   } catch (error) {
     res.status(500).json({ error: `Failed to fetch tasks: ${error.message}` });
   }
@@ -245,6 +278,10 @@ router.post('/tasks', async (req, res) => {
     if (error) return res.status(400).json({ error });
 
     const { title, projectId, assigneeId, estimatedHours, week } = req.body;
+    if (req.user.role === 'engineer' && assigneeId !== req.user.personId) {
+      return res.status(403).json({ error: 'Engineers can only assign tasks to themselves.' });
+    }
+
     const newTask = {
       id: `t-${Date.now()}`,
       title: title.trim(),
@@ -268,6 +305,15 @@ router.put('/tasks/:id', async (req, res) => {
     if (index === -1) return res.status(404).json({ error: 'Task not found.' });
 
     const existing = data.tasks[index];
+    if (req.user.role === 'engineer') {
+      if (existing.assigneeId !== req.user.personId) {
+        return res.status(403).json({ error: 'Engineers can only update their own tasks.' });
+      }
+      if (req.body.assigneeId !== undefined && req.body.assigneeId !== req.user.personId) {
+        return res.status(403).json({ error: 'Engineers can only keep tasks assigned to themselves.' });
+      }
+    }
+
     const merged = { ...existing, ...req.body };
     if (merged.week !== undefined) {
       const parsed = parseWeek(merged.week);
@@ -287,7 +333,7 @@ router.put('/tasks/:id', async (req, res) => {
   }
 });
 
-router.delete('/tasks/:id', async (req, res) => {
+router.delete('/tasks/:id', requireRole('boss', 'lead'), async (req, res) => {
   try {
     const data = await loadData();
     const index = data.tasks.findIndex(t => t.id === req.params.id);
@@ -339,6 +385,10 @@ router.get('/reports/load', async (req, res) => {
     }
 
     let people = data.people;
+    const visible = await getVisiblePersonIds(req.user);
+    if (visible) {
+      people = people.filter(p => visible.includes(p.id));
+    }
     if (teamFilter) {
       people = people.filter(p => (p.team || '').toLowerCase() === teamFilter.toLowerCase());
     }
