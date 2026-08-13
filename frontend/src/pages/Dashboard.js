@@ -32,7 +32,8 @@ const getDraggedTaskId = (dataTransfer) => {
   return plain && plain.startsWith('t-') ? plain : null;
 };
 
-const Dashboard = () => {
+const Dashboard = ({ user, onLogout }) => {
+  const canManage = user.role === 'boss' || user.role === 'lead';
   const [people, setPeople] = useState([]);
   const [projects, setProjects] = useState([]);
   const [tasks, setTasks] = useState([]);
@@ -176,10 +177,15 @@ const Dashboard = () => {
 
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-gray-800">Capacity Planner</h1>
-        <div className="space-x-2">
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-gray-600 bg-white rounded px-3 py-2 border">
+            {user.personName || user.email}
+            <span className="text-gray-400"> · {user.role}</span>
+          </span>
           <Button onClick={() => setTaskModalOpen(true)} className="bg-green-600 hover:bg-green-700">+ Add Task</Button>
-          <Button onClick={() => setPersonModalOpen(true)}>+ Add Person</Button>
-          <Button onClick={() => setProjectModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700">+ Add Project</Button>
+          {canManage && <Button onClick={() => setPersonModalOpen(true)}>+ Add Person</Button>}
+          {canManage && <Button onClick={() => setProjectModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700">+ Add Project</Button>}
+          <Button onClick={onLogout} className="bg-gray-600 hover:bg-gray-700">Logout</Button>
         </div>
       </div>
 
@@ -273,11 +279,13 @@ const Dashboard = () => {
                     <div className="flex items-center gap-2">
                       <span>{person.name}</span>
                       {person.overloaded && <span className="text-xs bg-red-600 text-white px-2 py-0.5 rounded-full">Overloaded</span>}
-                      <button
-                        onClick={() => handleDeletePerson(person)}
-                        className="text-gray-300 hover:text-red-500"
-                        title="Delete person"
-                      >✕</button>
+                      {canManage && (
+                        <button
+                          onClick={() => handleDeletePerson(person)}
+                          className="text-gray-300 hover:text-red-500"
+                          title="Delete person"
+                        >✕</button>
+                      )}
                     </div>
                   </td>
                   <td className="p-2 text-gray-600">{person.team}</td>
@@ -319,7 +327,11 @@ const Dashboard = () => {
             </tbody>
           </table>
         </div>
-        <p className="text-xs text-gray-400 mt-2">Drag a task chip below onto a person's row to reassign it.</p>
+        <p className="text-xs text-gray-400 mt-2">
+          {canManage
+            ? 'Drag a task chip below onto a person\'s row to reassign it.'
+            : 'You have read-only access — your manager can reassign tasks.'}
+        </p>
       </Card>
 
       <Card>
@@ -351,24 +363,26 @@ const Dashboard = () => {
                   {groupTasks.map(task => (
                     <span
                       key={task.id}
-                      draggable
+                      draggable={canManage}
                       onDragStart={(e) => {
                         e.dataTransfer.setData(TASK_DRAG_TYPE, task.id);
                         e.dataTransfer.setData('text/plain', task.id);
                       }}
                       className="inline-flex items-center gap-2 bg-white border border-gray-300 rounded-full px-3 py-1 text-sm cursor-grab hover:border-blue-400"
-                      title="Drag to another person to reassign"
+                      title={canManage ? 'Drag to another person to reassign' : 'Read-only view'}
                     >
                       <span className="text-gray-400">⋮⋮</span>
                       <span className="font-medium">{task.title}</span>
                       <span className="text-xs text-gray-500">{task.projectName}</span>
                       <span className="text-xs text-blue-600 font-semibold">{task.estimatedHours}h</span>
                       <span className="text-xs text-gray-400">{formatWeekLabel(task.week)}</span>
-                      <button
-                        onClick={() => handleDeleteTask(task)}
-                        className="text-gray-300 hover:text-red-500 ml-1"
-                        title="Delete task"
-                      >✕</button>
+                      {canManage && (
+                        <button
+                          onClick={() => handleDeleteTask(task)}
+                          className="text-gray-300 hover:text-red-500 ml-1"
+                          title="Delete task"
+                        >✕</button>
+                      )}
                     </span>
                   ))}
                 </div>
@@ -385,18 +399,23 @@ const Dashboard = () => {
         people={people}
         projects={projects}
         currentMonday={toISO(todayMonday())}
+        assigneeLock={canManage ? null : user.personId}
       />
-      <PersonFormModal
-        isOpen={personModalOpen}
-        onClose={() => setPersonModalOpen(false)}
-        onCreated={handleCreatedPerson}
-        teams={teamNames}
-      />
-      <ProjectFormModal
-        isOpen={projectModalOpen}
-        onClose={() => setProjectModalOpen(false)}
-        onCreated={handleCreatedProject}
-      />
+      {canManage && (
+        <>
+          <PersonFormModal
+            isOpen={personModalOpen}
+            onClose={() => setPersonModalOpen(false)}
+            onCreated={handleCreatedPerson}
+            teams={teamNames}
+          />
+          <ProjectFormModal
+            isOpen={projectModalOpen}
+            onClose={() => setProjectModalOpen(false)}
+            onCreated={handleCreatedProject}
+          />
+        </>
+      )}
     </div>
   );
 };
