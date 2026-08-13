@@ -1,12 +1,18 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { setDataFile } = require('../lib/store');
+const { Pool } = require('pg');
 
-const tmpFile = path.join(os.tmpdir(), `capa-test-${Date.now()}.json`);
-fs.writeFileSync(tmpFile, JSON.stringify({
+process.env.NODE_ENV = 'test';
+
+const ADMIN_URL = 'postgres://capa:capa@localhost:5432/capa';
+const TEST_URL = process.env.TEST_DATABASE_URL || 'postgres://capa:capa@localhost:5432/capa_test';
+process.env.DATABASE_URL = TEST_URL;
+
+const { setPool, getPool } = require('../lib/db');
+const { runMigrations } = require('../db/migrate');
+const { saveData } = require('../lib/store');
+
+const seed = {
   people: [
     { id: 'p-1', name: 'Alice', team: 'Alpha', weeklyCapacity: 40 },
     { id: 'p-2', name: 'Bob', team: 'Beta', weeklyCapacity: 40 }
@@ -21,10 +27,7 @@ fs.writeFileSync(tmpFile, JSON.stringify({
     { id: 't-3', title: 'API docs', projectId: 'pr-2', assigneeId: 'p-2', estimatedHours: 8, week: '2026-08-10' },
     { id: 't-4', title: 'Support backlog', projectId: 'pr-2', assigneeId: 'p-1', estimatedHours: 6, week: '2026-08-17' }
   ]
-}, null, 2));
-
-setDataFile(tmpFile);
-process.env.NODE_ENV = 'test';
+};
 
 const app = require('../app');
 
@@ -32,15 +35,31 @@ let server;
 let base;
 
 before(async () => {
+  const admin = new Pool({ connectionString: ADMIN_URL });
+  try {
+    await admin.query('CREATE DATABASE capa_test');
+  } catch (err) {
+    if (err.code !== '42P04') throw err;
+  }
+  await admin.end();
+
+  const pool = new Pool({ connectionString: TEST_URL });
+  setPool(pool);
+  await runMigrations(pool);
+  await saveData(seed);
+
   server = app.listen(0);
   await new Promise(resolve => server.on('listening', resolve));
   base = `http://127.0.0.1:${server.address().port}/api`;
 });
 
-after(() => {
+after(async () => {
   server.close();
-  fs.rmSync(tmpFile, { force: true });
-  fs.rmSync(`${tmpFile}.tmp`, { force: true });
+  await getPool().end();
+
+  const admin = new Pool({ connectionString: ADMIN_URL });
+  await admin.query('DROP DATABASE IF EXISTS capa_test WITH (FORCE)');
+  await admin.end();
 });
 
 const api = (pathname, opts) => fetch(`${base}${pathname}`, opts);
