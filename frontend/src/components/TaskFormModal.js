@@ -4,7 +4,7 @@ import { Button } from './Button';
 import { createTask } from '../services/api';
 import { weekToMonday, toISO } from '../utils/dateUtils';
 
-const TaskFormModal = ({ isOpen, onClose, onCreated, people = [], projects = [], currentMonday }) => {
+const TaskFormModal = ({ isOpen, onClose, onCreated, people = [], projects = [], currentMonday, assigneeLock = null }) => {
   const [title, setTitle] = useState('');
   const [projectId, setProjectId] = useState('');
   const [assigneeId, setAssigneeId] = useState('');
@@ -32,7 +32,7 @@ const TaskFormModal = ({ isOpen, onClose, onCreated, people = [], projects = [],
       const response = await createTask({
         title,
         projectId,
-        assigneeId: assigneeId || null,
+        assigneeId: assigneeLock || assigneeId || null,
         estimatedHours: Number(estimatedHours),
         week: toISO(monday)
       });
@@ -78,14 +78,23 @@ const TaskFormModal = ({ isOpen, onClose, onCreated, people = [], projects = [],
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Assignee</label>
-              <select
-                value={assigneeId}
-                onChange={(e) => setAssigneeId(e.target.value)}
-                className="w-full p-2 border rounded"
-              >
-                <option value="">Unassigned</option>
-                {people.map(p => <option key={p.id} value={p.id}>{p.name} ({p.team})</option>)}
-              </select>
+              {assigneeLock ? (
+                <input
+                  type="text"
+                  value={people.find(p => p.id === assigneeLock)?.name || ''}
+                  disabled
+                  className="w-full p-2 border rounded bg-gray-100 text-gray-600"
+                />
+              ) : (
+                <select
+                  value={assigneeId}
+                  onChange={(e) => setAssigneeId(e.target.value)}
+                  className="w-full p-2 border rounded"
+                >
+                  <option value="">Unassigned</option>
+                  {people.map(p => <option key={p.id} value={p.id}>{p.name} ({p.team})</option>)}
+                </select>
+              )}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
