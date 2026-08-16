@@ -43,25 +43,25 @@ const PersonFormModal = ({ isOpen, onClose, onCreated, teams = [] }) => {
   return (
     <Modal isOpen={isOpen} onClose={onClose} ariaLabel="Add person">
       <div className="space-y-4">
-        <h2 className="text-2xl font-bold text-gray-800">Add Person</h2>
-        {error && <div className="text-red-500 text-sm">{error}</div>}
+        <h2 className="text-xl font-semibold text-gray-800">Add Person</h2>
+        {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-md">{error}</div>}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Name</label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full p-2 border rounded"
+              className="w-full h-11 px-3.5 rounded-md border border-gray-300 bg-white text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none transition"
               required
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Team</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Team</label>
             <select
               value={team}
               onChange={(e) => setTeam(e.target.value)}
-              className="w-full p-2 border rounded"
+              className="w-full h-11 px-3.5 rounded-md border border-gray-300 bg-white text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none transition"
             >
               <option value="">Select a team…</option>
               {teams.map(t => <option key={t} value={t}>{t}</option>)}
@@ -73,24 +73,24 @@ const PersonFormModal = ({ isOpen, onClose, onCreated, teams = [] }) => {
                 value={customTeam}
                 onChange={(e) => setCustomTeam(e.target.value)}
                 placeholder="Team name"
-                className="w-full p-2 border rounded mt-2"
+                className="w-full h-11 px-3.5 rounded-md border border-gray-300 bg-white text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none transition mt-2"
               />
             )}
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Weekly capacity (hours)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Weekly capacity (hours)</label>
             <input
               type="number"
               min="1"
               max="168"
               value={weeklyCapacity}
               onChange={(e) => setWeeklyCapacity(e.target.value)}
-              className="w-full p-2 border rounded"
+              className="w-full h-11 px-3.5 rounded-md border border-gray-300 bg-white text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none transition"
               required
             />
           </div>
           <div className="flex justify-end space-x-2 pt-2">
-            <Button type="button" onClick={onClose} className="bg-gray-300 hover:bg-gray-400">Cancel</Button>
+            <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
             <Button type="submit" disabled={submitting}>{submitting ? 'Saving…' : 'Add Person'}</Button>
           </div>
         </form>
