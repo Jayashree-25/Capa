@@ -3,17 +3,26 @@ import { Modal } from './Modal';
 import { Button } from './Button';
 import { createPerson } from '../services/api';
 
-const PersonFormModal = ({ isOpen, onClose, onCreated, teams = [] }) => {
+const inputClass =
+  'w-full h-11 px-3.5 rounded-md border border-gray-300 bg-white text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none transition';
+
+const PersonFormModal = ({ isOpen, onClose, onCreated, teams = [], people = [] }) => {
   const [name, setName] = useState('');
   const [team, setTeam] = useState('');
+  const [role, setRole] = useState('member');
+  const [managerId, setManagerId] = useState('');
   const [weeklyCapacity, setWeeklyCapacity] = useState(40);
   const [customTeam, setCustomTeam] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  const leads = people.filter(p => p.role === 'lead');
+
   const resetForm = () => {
     setName('');
     setTeam('');
+    setRole('member');
+    setManagerId('');
     setWeeklyCapacity(40);
     setCustomTeam('');
     setError('');
@@ -29,7 +38,13 @@ const PersonFormModal = ({ isOpen, onClose, onCreated, teams = [] }) => {
     setSubmitting(true);
     setError('');
     try {
-      const response = await createPerson({ name, team: finalTeam, weeklyCapacity: Number(weeklyCapacity) });
+      const response = await createPerson({
+        name,
+        team: finalTeam,
+        weeklyCapacity: Number(weeklyCapacity),
+        role,
+        managerId: role === 'lead' ? null : (managerId || null)
+      });
       resetForm();
       onCreated(response.data);
       onClose();
@@ -52,7 +67,7 @@ const PersonFormModal = ({ isOpen, onClose, onCreated, teams = [] }) => {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full h-11 px-3.5 rounded-md border border-gray-300 bg-white text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none transition"
+              className={inputClass}
               required
             />
           </div>
@@ -61,7 +76,7 @@ const PersonFormModal = ({ isOpen, onClose, onCreated, teams = [] }) => {
             <select
               value={team}
               onChange={(e) => setTeam(e.target.value)}
-              className="w-full h-11 px-3.5 rounded-md border border-gray-300 bg-white text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none transition"
+              className={inputClass}
             >
               <option value="">Select a team…</option>
               {teams.map(t => <option key={t} value={t}>{t}</option>)}
@@ -73,8 +88,43 @@ const PersonFormModal = ({ isOpen, onClose, onCreated, teams = [] }) => {
                 value={customTeam}
                 onChange={(e) => setCustomTeam(e.target.value)}
                 placeholder="Team name"
-                className="w-full h-11 px-3.5 rounded-md border border-gray-300 bg-white text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none transition mt-2"
+                className={`${inputClass} mt-2`}
               />
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Role</label>
+            <div className="flex rounded-md border border-gray-300 overflow-hidden w-fit">
+              {['member', 'lead'].map(option => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => {
+                    setRole(option);
+                    setManagerId('');
+                  }}
+                  className={`h-10 px-4 text-sm font-medium capitalize ${role === option ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Reports to</label>
+            {role === 'lead' ? (
+              <p className="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-md px-3.5 py-2.5">
+                Leads report directly to the Boss.
+              </p>
+            ) : (
+              <select
+                value={managerId}
+                onChange={(e) => setManagerId(e.target.value)}
+                className={inputClass}
+              >
+                <option value="">No manager — Solo</option>
+                {leads.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
             )}
           </div>
           <div>
@@ -85,7 +135,7 @@ const PersonFormModal = ({ isOpen, onClose, onCreated, teams = [] }) => {
               max="168"
               value={weeklyCapacity}
               onChange={(e) => setWeeklyCapacity(e.target.value)}
-              className="w-full h-11 px-3.5 rounded-md border border-gray-300 bg-white text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none transition"
+              className={inputClass}
               required
             />
           </div>
