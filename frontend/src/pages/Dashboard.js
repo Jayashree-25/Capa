@@ -18,9 +18,9 @@ const WEEK_COUNT = 6;
 const MONTH_COUNT = 3;
 
 const cellStyle = (bucket) => {
-  if (bucket.overloaded) return 'bg-red-100 text-red-800 border-red-300';
-  if (bucket.utilization >= 0.8) return 'bg-amber-100 text-amber-800 border-amber-300';
-  return 'bg-green-50 text-green-800 border-green-200';
+  if (bucket.overloaded) return 'bg-red-50 text-red-700 border-red-200';
+  if (bucket.utilization >= 0.8) return 'bg-amber-50 text-amber-700 border-amber-200';
+  return 'bg-green-50 text-green-700 border-green-200';
 };
 
 const TASK_DRAG_TYPE = 'application/x-capa-task';
@@ -176,29 +176,32 @@ const Dashboard = ({ user }) => {
       )}
 
       <div className="flex flex-wrap justify-between items-center gap-3">
-        <h1 className="text-2xl font-semibold text-gray-800">Dashboard</h1>
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-800">Dashboard</h1>
+          <p className="text-sm text-gray-500 mt-0.5">Monitor team capacity and workload across upcoming weeks.</p>
+        </div>
         <div className="flex items-center gap-3">
-          <Button onClick={() => setTaskModalOpen(true)} className="bg-green-600 hover:bg-green-700">+ Add Task</Button>
-          {canManage && <Button onClick={() => setPersonModalOpen(true)}>+ Add Person</Button>}
-          {canManage && <Button onClick={() => setProjectModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700">+ Add Project</Button>}
+          <Button onClick={() => setTaskModalOpen(true)}>+ Add Task</Button>
+          {canManage && <Button variant="secondary" onClick={() => setPersonModalOpen(true)}>+ Add Person</Button>}
+          {canManage && <Button variant="secondary" onClick={() => setProjectModalOpen(true)}>+ Add Project</Button>}
         </div>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card><div className="text-sm text-gray-500">People in view</div><div className="text-2xl font-bold">{report ? report.people.length : 0}</div></Card>
+        <Card><div className="text-sm text-gray-500">People in view</div><div className="text-3xl font-semibold tracking-tight text-gray-900">{report ? report.people.length : 0}</div></Card>
         <Card>
-          <div className="text-sm text-gray-500">Overloaded (any period)</div>
-          <div className={`text-2xl font-bold ${overloadedCount > 0 ? 'text-red-600' : 'text-green-600'}`}>
-            {overloadedCount} {overloadedCount > 0 && '⚠'}
+          <div className="text-sm text-gray-500">Overloaded</div>
+          <div className={`text-3xl font-semibold tracking-tight ${overloadedCount > 0 ? 'text-red-600' : 'text-gray-900'}`}>
+            {overloadedCount}
           </div>
         </Card>
-        <Card><div className="text-sm text-gray-500">Assigned in range</div><div className="text-2xl font-bold">{totalAssigned}h</div></Card>
-        <Card><div className="text-sm text-gray-500">Available in range</div><div className="text-2xl font-bold">{Math.max(0, totalCapacity - totalAssigned)}h</div></Card>
+        <Card><div className="text-sm text-gray-500">Assigned in range</div><div className="text-3xl font-semibold tracking-tight text-gray-900">{totalAssigned}h</div></Card>
+        <Card><div className="text-sm text-gray-500">Available in range</div><div className="text-3xl font-semibold tracking-tight text-gray-900">{Math.max(0, totalCapacity - totalAssigned)}h</div></Card>
       </div>
 
       <Card>
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex rounded border border-gray-300 overflow-hidden">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex rounded-md border border-gray-300 overflow-hidden">
             {['week', 'month'].map(mode => (
               <button
                 key={mode}
@@ -206,7 +209,7 @@ const Dashboard = ({ user }) => {
                   setGranularity(mode);
                   setPeriodStart(mode === 'week' ? todayMonday() : firstOfMonth(new Date()));
                 }}
-                className={`px-4 py-2 capitalize ${granularity === mode ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                className={`h-10 px-4 text-sm font-medium capitalize ${granularity === mode ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
               >
                 {mode}
               </button>
@@ -214,15 +217,15 @@ const Dashboard = ({ user }) => {
           </div>
 
           <div className="flex items-center gap-2">
-            <button onClick={() => navigate(-1)} className="px-3 py-1.5 border rounded hover:bg-gray-100">‹</button>
-            <span className="font-medium min-w-[180px] text-center">{rangeLabel}</span>
-            <button onClick={() => navigate(1)} className="px-3 py-1.5 border rounded hover:bg-gray-100">›</button>
+            <button onClick={() => navigate(-1)} className="h-10 w-9 border border-gray-300 rounded-md hover:bg-gray-100 text-gray-600 text-lg leading-none">‹</button>
+            <span className="font-semibold text-gray-800 text-sm min-w-[180px] text-center">{rangeLabel}</span>
+            <button onClick={() => navigate(1)} className="h-10 w-9 border border-gray-300 rounded-md hover:bg-gray-100 text-gray-600 text-lg leading-none">›</button>
           </div>
 
           <select
             value={teamFilter}
             onChange={(e) => setTeamFilter(e.target.value)}
-            className="p-2 border rounded"
+            className="h-10 px-3 rounded-md border border-gray-300 bg-white text-sm text-gray-700 focus:border-blue-500 focus:outline-none"
           >
             <option value="">All teams</option>
             {teamNames.map(t => <option key={t} value={t}>{t}</option>)}
@@ -231,7 +234,7 @@ const Dashboard = ({ user }) => {
           <select
             value={projectFilter}
             onChange={(e) => setProjectFilter(e.target.value)}
-            className="p-2 border rounded"
+            className="h-10 px-3 rounded-md border border-gray-300 bg-white text-sm text-gray-700 focus:border-blue-500 focus:outline-none"
           >
             <option value="">All projects</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -244,16 +247,16 @@ const Dashboard = ({ user }) => {
           <table className="w-full text-sm border-collapse min-w-[900px]">
             <thead>
               <tr className="bg-gray-50">
-                <th className="text-left p-2 border-b-2 border-gray-200">Person</th>
-                <th className="text-left p-2 border-b-2 border-gray-200">Team</th>
-                <th className="text-right p-2 border-b-2 border-gray-200">Cap/wk</th>
+                <th className="text-left p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Person</th>
+                <th className="text-left p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Team</th>
+                <th className="text-right p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Cap/wk</th>
                 {buckets.map(key => (
-                  <th key={key} className="text-center p-2 border-b-2 border-gray-200">
+                  <th key={key} className="text-center p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">
                     {granularity === 'week' ? formatWeekLabel(key) : formatMonthLabel(key)}
                   </th>
                 ))}
-                <th className="text-right p-2 border-b-2 border-gray-200">Total</th>
-                <th className="text-center p-2 border-b-2 border-gray-200">Status</th>
+                <th className="text-right p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Total</th>
+                <th className="text-center p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Status</th>
               </tr>
             </thead>
             <tbody>
@@ -270,10 +273,10 @@ const Dashboard = ({ user }) => {
                   }}
                   className={`border-b border-gray-100 ${person.overloaded ? 'bg-red-50' : ''} ${dropTarget === person.id ? 'bg-blue-100 ring-2 ring-blue-400' : ''}`}
                 >
-                  <td className="p-2 font-medium">
+                  <td className="p-2.5">
                     <div className="flex items-center gap-2">
-                      <span>{person.name}</span>
-                      {person.overloaded && <span className="text-xs bg-red-600 text-white px-2 py-0.5 rounded-full">Overloaded</span>}
+                      <span className="font-semibold text-gray-900">{person.name}</span>
+                      {person.overloaded && <span className="text-xs font-medium bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Overloaded</span>}
                       {canManage && (
                         <button
                           onClick={() => handleDeletePerson(person)}
@@ -283,39 +286,39 @@ const Dashboard = ({ user }) => {
                       )}
                     </div>
                   </td>
-                  <td className="p-2 text-gray-600">{person.team}</td>
-                  <td className="p-2 text-right">{person.weeklyCapacity}h</td>
+                  <td className="p-2.5 text-gray-600">{person.team}</td>
+                  <td className="p-2.5 text-right">{person.weeklyCapacity}h</td>
                   {person.buckets.map(bucket => (
-                    <td key={bucket.key} className={`p-1.5 text-center border rounded m-0 ${cellStyle(bucket)}`}>
+                    <td key={bucket.key} className={`p-2 text-center border rounded m-0 ${cellStyle(bucket)}`}>
                       <span className="font-semibold">{bucket.assignedHours}h</span>
                       {granularity === 'week' && (
-                        <span className="block text-[10px] opacity-70">of {bucket.capacityHours}h</span>
+                        <span className="block text-[11px] opacity-70">of {bucket.capacityHours}h</span>
                       )}
                     </td>
                   ))}
-                  <td className={`p-2 text-right font-semibold ${person.totalAssignedHours > person.totalCapacityHours ? 'text-red-600' : ''}`}>
+                  <td className={`p-2.5 text-right font-semibold ${person.totalAssignedHours > person.totalCapacityHours ? 'text-red-600' : ''}`}>
                     {person.totalAssignedHours}h
                   </td>
-                  <td className="p-2 text-center">
+                  <td className="p-2.5 text-center">
                     {person.overloaded
-                      ? <span className="inline-block bg-red-600 text-white text-xs px-2 py-1 rounded-full">Overloaded</span>
-                      : <span className="inline-block bg-green-600 text-white text-xs px-2 py-1 rounded-full">OK</span>}
+                      ? <span className="inline-block bg-red-600 text-white text-xs px-2 py-0.5 rounded-full">Overloaded</span>
+                      : <span className="inline-block bg-green-600 text-white text-xs px-2 py-0.5 rounded-full">OK</span>}
                   </td>
                 </tr>
               ))}
               {report && (
-                <tr className="bg-gray-50 font-medium">
-                  <td className="p-2" colSpan="3">Team total</td>
+                <tr className="bg-gray-100 font-semibold border-t-2 border-gray-200">
+                  <td className="p-2.5" colSpan="3">Team total</td>
                   {report.teamTotals.map(bucket => (
                     <td key={bucket.key} className={`p-2 text-center ${bucket.overloaded ? 'text-red-600' : ''}`}>
                       {bucket.assignedHours}/{bucket.capacityHours}h
                     </td>
                   ))}
-                  <td className="p-2 text-right">{totalAssigned}h</td>
-                  <td className="p-2 text-center">
+                  <td className="p-2.5 text-right">{totalAssigned}h</td>
+                  <td className="p-2.5 text-center">
                     {report.teamTotals.some(b => b.overloaded)
-                      ? <span className="inline-block bg-red-600 text-white text-xs px-2 py-1 rounded-full">Overloaded</span>
-                      : <span className="inline-block bg-green-600 text-white text-xs px-2 py-1 rounded-full">OK</span>}
+                      ? <span className="inline-block bg-red-600 text-white text-xs px-2 py-0.5 rounded-full">Overloaded</span>
+                      : <span className="inline-block bg-green-600 text-white text-xs px-2 py-0.5 rounded-full">OK</span>}
                   </td>
                 </tr>
               )}
@@ -347,12 +350,12 @@ const Dashboard = ({ user }) => {
                   setDropTarget(null);
                   if (taskId) handleReassign(taskId, key === 'unassigned' ? null : key);
                 }}
-                className={`rounded-lg p-3 ${dropTarget === key ? 'bg-blue-100 ring-2 ring-blue-400' : 'bg-gray-50'}`}
+                className={`rounded-lg p-3.5 ${dropTarget === key ? 'bg-blue-100 ring-2 ring-blue-400' : 'bg-gray-50/70'}`}
               >
-                <h3 className="font-medium text-gray-700 mb-2">
+                <h3 className="font-semibold text-gray-800 mb-2">
                   {person ? person.name : 'Unassigned'}
-                  <span className="ml-2 text-xs text-gray-400">{groupTasks.length} task(s)</span>
-                  {person && <span className="ml-2 text-xs text-gray-400">{person.team}</span>}
+                  <span className="ml-2 text-xs font-normal text-gray-400">{groupTasks.length} task(s)</span>
+                  {person && <span className="ml-2 text-xs font-normal text-gray-500">{person.team}</span>}
                 </h3>
                 <div className="flex flex-wrap gap-2">
                   {groupTasks.map(task => (
@@ -367,7 +370,7 @@ const Dashboard = ({ user }) => {
                       title={canManage ? 'Drag to another person to reassign' : 'Read-only view'}
                     >
                       <span className="text-gray-400">⋮⋮</span>
-                      <span className="font-medium">{task.title}</span>
+                      <span className="font-medium text-gray-800">{task.title}</span>
                       <span className="text-xs text-gray-500">{task.projectName}</span>
                       <span className="text-xs text-blue-600 font-semibold">{task.estimatedHours}h</span>
                       <span className="text-xs text-gray-400">{formatWeekLabel(task.week)}</span>
