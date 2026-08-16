@@ -4,7 +4,7 @@ import { Button } from './Button';
 import { createTask } from '../services/api';
 import { weekToMonday, toISO } from '../utils/dateUtils';
 
-const TaskFormModal = ({ isOpen, onClose, onCreated, people = [], projects = [], currentMonday, assigneeLock = null }) => {
+const TaskFormModal = ({ isOpen, onClose, onCreated, people = [], projects = [], currentMonday, assigneeLock = null, isBoss = false }) => {
   const [title, setTitle] = useState('');
   const [projectId, setProjectId] = useState('');
   const [assigneeId, setAssigneeId] = useState('');
@@ -46,6 +46,9 @@ const TaskFormModal = ({ isOpen, onClose, onCreated, people = [], projects = [],
       setSubmitting(false);
     }
   };
+
+  const leads = people.filter(p => p.role === 'lead');
+  const solo = people.filter(p => p.role !== 'lead' && !p.managerId);
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} ariaLabel="Add task">
@@ -92,7 +95,22 @@ const TaskFormModal = ({ isOpen, onClose, onCreated, people = [], projects = [],
                   className="w-full h-11 px-3.5 rounded-md border border-gray-300 bg-white text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none transition"
                 >
                   <option value="">Unassigned</option>
-                  {people.map(p => <option key={p.id} value={p.id}>{p.name} ({p.team})</option>)}
+                  {isBoss ? (
+                    <>
+                      {leads.length > 0 && (
+                        <optgroup label="Leads">
+                          {leads.map(p => <option key={p.id} value={p.id}>{p.name} ({p.team})</option>)}
+                        </optgroup>
+                      )}
+                      {solo.length > 0 && (
+                        <optgroup label="Solo">
+                          {solo.map(p => <option key={p.id} value={p.id}>{p.name} ({p.team})</option>)}
+                        </optgroup>
+                      )}
+                    </>
+                  ) : (
+                    people.map(p => <option key={p.id} value={p.id}>{p.name} ({p.team})</option>)
+                  )}
                 </select>
               )}
             </div>
