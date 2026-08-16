@@ -506,9 +506,14 @@ router.get('/reports/load', async (req, res) => {
       people = people.filter(p => (p.team || '').toLowerCase() === teamFilter.toLowerCase());
     }
 
+    // A top-level task that has chunks is fully delegated: its own hours never
+    // count toward the parent assignee's load — only the chunks count, once.
+    const delegatedParentIds = new Set(data.tasks.filter(t => t.parentId).map(t => t.parentId));
+
     const bucketTaskHours = (p, bucketKey) => {
       let total = 0;
       for (const t of data.tasks) {
+        if (delegatedParentIds.has(t.id)) continue;
         if (t.assigneeId !== p.id) continue;
         if (projectFilter && t.projectId !== projectFilter) continue;
         if (granularity === 'week') {
