@@ -196,6 +196,7 @@ test('PUT /api/people/:id updates and rejects unknown ids', async () => {
 });
 
 test('PUT /api/people/:id sets a manager and rejects invalid ones', async () => {
+  await json('PUT', '/people/p-9', { role: 'lead' });
   const res = await json('PUT', '/people/p-2', { managerId: 'p-9' });
   assert.strictEqual(res.status, 200);
   assert.strictEqual((await res.json()).managerId, 'p-9');
@@ -342,7 +343,7 @@ test('DELETE /api/people allows deletion once tasks are unassigned', async () =>
 });
 
 test('scoped views: lead sees their subtree, engineer sees only themselves', async () => {
-  const mgr = await (await json('POST', '/people', { name: 'Mgr', team: 'Omega', weeklyCapacity: 40 })).json();
+  const mgr = await (await json('POST', '/people', { name: 'Mgr', team: 'Omega', weeklyCapacity: 40, role: 'lead' })).json();
   const empA = await (await json('POST', '/people', { name: 'EmpA', team: 'Omega', weeklyCapacity: 40, managerId: mgr.id })).json();
   const empB = await (await json('POST', '/people', { name: 'EmpB', team: 'Omega', weeklyCapacity: 40, managerId: mgr.id })).json();
 
@@ -406,4 +407,63 @@ test('scoped views: lead sees their subtree, engineer sees only themselves', asy
   assert.strictEqual(ownTask.status, 201);
   assert.strictEqual((await engReq('/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'Other', projectId: 'pr-1', assigneeId: empB.id, estimatedHours: 2, week: '2026-08-10' }) })).status, 403);
   assert.strictEqual((await engReq(`/tasks/${empBtask.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assigneeId: empB.id }) })).status, 403);
+});
+
+// ---------- Org hierarchy ----------
+test('people roles: valid lead/member/solo hierarchies', async () => {
+  const lead = await json('POST', '/people', { name: 'Lead One', team: 'Omega', weeklyCapacity: 40, role: 'lead' });
+  assert.strictEqual(lead.status, 201);
+  const leadBody = await lead.json();
+  assert.strictEqual(leadBody.role, 'lead');
+  assert.strictEqual(leadBody.managerId, null);
+
+  const member = await json('POST', '/people', { name: 'Member One', team: 'Omega', weeklyCapacity: 40, role: 'member', managerId: leadBody.id });
+  assert.strictEqual(member.status, 201);
+  assert.strictEqual((await member.json()).managerId, leadBody.id);
+
+  const solo = await json('POST', '/people', { name: 'Solo One', team: 'Omega', weeklyCapacity: 40 });
+  assert.strictEqual(solo.status, 201);
+  const soloBody = await solo.json();
+  assert.strictEqual(soloBody.role, 'member');
+  assert.strictEqual(soloBody.managerId, null);
+
+  const people = await (await request('/people')).json();
+  assert.strictEqual(people.find(p => p.id === leadBody.id).role, 'lead');
+});
+
+test('people roles: invalid hierarchies are rejected', async () => {
+  const m1 = await (await json('POST', '/people', { name: 'Member A', team: 'Omega', weeklyCapacity: 40 })).json();
+  const m2 = await (await json('POST', '/people', { name: 'Member B', team: 'Omega', weeklyCapacity: 40 })).json();
+
+  assert.strictEqual((await json('POST', '/people', { name: 'Bad Lead', team: 'Omega', role: 'lead', managerId: m1.id })).status, 400);
+  assert.strictEqual((await json('POST', '/people', { name: 'Bad Member', team: 'Omega', role: 'member', managerId: m2.id })).status, 400);
+  assert.strictEqual((await json('POST', '/people', { name: 'Ghost Manager', team: 'Omega', role: 'member', managerId: 'nope' })).status, 400);
+  assert.strictEqual((await json('POST', '/people', { name: 'Bad Role', team: 'Omega', role: 'admin' })).status, 400);
+  assert.strictEqual((await json('PUT', `/people/${m1.id}`, { managerId: m2.id })).status, 400);
+});
+
+test('people roles: lead demotion and deletion are guarded', async () => {
+  const lead = await (await json('POST', '/people', { name: 'Demote Lead', team: 'Omega', role: 'lead' })).json();
+  const follower = await (await json('POST', '/people', { name: 'Follower', team: 'Omega', role: 'member', managerId: lead.id })).json();
+
+  assert.strictEqual((await json('PUT', `/people/${lead.id}`, { role: 'member' })).status, 400);
+  assert.strictEqual((await request(`/people/${lead.id}`, { method: 'DELETE' })).status, 409);
+
+  await json('PUT', `/people/${follower.id}`, { managerId: null });
+  assert.strictEqual((await request(`/people/${lead.id}`, { method: 'DELETE' })).status, 200);
+});
+
+test('register syncs the account role to the person role', async () => {
+  const lead = await (await json('POST', '/people', { name: 'Account Lead', team: 'Omega', role: 'lead' })).json();
+  const created = await json('POST', '/auth/register', {
+    email: 'accountlead@capa.test',
+    password: 'account-lead-123',
+    role: 'engineer',
+    personId: lead.id
+  });
+  assert.strictEqual(created.status, 201);
+  assert.strictEqual((await created.json()).role, 'lead');
+
+  const member = await (await json('POST', '/people', { name: 'Account Member', team: 'Omega' })).json();
+  assert.strictEqual((await json('POST', '/auth/register', { email: 'accountmember@capa.test', password: 'account-member-123', role: 'lead', personId: member.id })).status, 400);
 });
