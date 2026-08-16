@@ -125,6 +125,19 @@ const delegationError = (role, assigneeId, people) => {
   return 'A boss can only assign tasks to a lead or a solo member (a member who does not report to a lead).';
 };
 
+// Chunk assignee rule: a lead may assign chunks only to themselves or to members
+// reporting directly to them. Returns { status, error } or null when valid.
+const chunkAssigneeIssue = (assigneeId, leadPersonId, people) => {
+  if (assigneeId === null || assigneeId === undefined) {
+    return { status: 400, error: 'A chunk must have an assignee.' };
+  }
+  if (assigneeId === leadPersonId) return null;
+  const assignee = people.find(p => p.id === assigneeId);
+  if (!assignee) return null; // existence is validated elsewhere
+  if (assignee.managerId === leadPersonId) return null;
+  return { status: 403, error: 'A lead can only assign chunks to themselves or to members reporting directly to them.' };
+};
+
 // ---------- People ----------
 router.get('/people', async (req, res) => {
   try {
@@ -291,6 +304,7 @@ router.get('/tasks', async (req, res) => {
     const data = await loadData();
     const peopleById = Object.fromEntries(data.people.map(p => [p.id, p]));
     const projectsById = Object.fromEntries(data.projects.map(p => [p.id, p]));
+    const tasksById = Object.fromEntries(data.tasks.map(t => [t.id, t]));
     let tasks = data.tasks;
     const visible = await getVisiblePersonIds(req.user);
     if (visible) {
@@ -303,7 +317,8 @@ router.get('/tasks', async (req, res) => {
     const enriched = tasks.map(t => ({
       ...t,
       assigneeName: t.assigneeId ? (peopleById[t.assigneeId]?.name || null) : null,
-      projectName: projectsById[t.projectId]?.name || null
+      projectName: projectsById[t.projectId]?.name || null,
+      parentTitle: t.parentId ? (tasksById[t.parentId]?.title || null) : null
     }));
     res.json(enriched);
   } catch (error) {
@@ -314,10 +329,35 @@ router.get('/tasks', async (req, res) => {
 router.post('/tasks', async (req, res) => {
   try {
     const data = await loadData();
-    const error = validateTaskInput(req.body, data);
+    const { title, projectId, assigneeId, estimatedHours, week, parentId } = req.body;
+
+    let resolvedProjectId = projectId;
+    let chunkParentId = null;
+    if (parentId !== undefined && parentId !== null) {
+      if (req.user.role !== 'lead') {
+        return res.status(403).json({ error: 'Only a lead can create delegated chunks.' });
+      }
+      const parent = data.tasks.find(t => t.id === parentId);
+      if (!parent) {
+        return res.status(400).json({ error: 'Parent task does not exist.' });
+      }
+      if (parent.parentId) {
+        return res.status(400).json({ error: 'A chunk cannot be a parent task (only one level of delegation is allowed).' });
+      }
+      if (parent.assigneeId !== req.user.personId) {
+        return res.status(403).json({ error: 'Only the lead assigned to a parent task can delegate it into chunks.' });
+      }
+      const chunkIssue = chunkAssigneeIssue(assigneeId, req.user.personId, data.people);
+      if (chunkIssue) {
+        return res.status(chunkIssue.status).json({ error: chunkIssue.error });
+      }
+      resolvedProjectId = parent.projectId;
+      chunkParentId = parentId;
+    }
+
+    const error = validateTaskInput({ ...req.body, projectId: resolvedProjectId }, data);
     if (error) return res.status(400).json({ error });
 
-    const { title, projectId, assigneeId, estimatedHours, week } = req.body;
     if (req.user.role === 'engineer' && assigneeId !== req.user.personId) {
       return res.status(403).json({ error: 'Engineers can only assign tasks to themselves.' });
     }
@@ -330,10 +370,11 @@ router.post('/tasks', async (req, res) => {
     const newTask = {
       id: `t-${Date.now()}`,
       title: title.trim(),
-      projectId,
+      projectId: resolvedProjectId,
       assigneeId: assigneeId === undefined ? null : assigneeId,
       estimatedHours,
-      week: toISODate(parseWeek(week))
+      week: toISODate(parseWeek(week)),
+      parentId: chunkParentId
     };
     data.tasks.push(newTask);
     await saveData(data);
@@ -349,6 +390,10 @@ router.put('/tasks/:id', async (req, res) => {
     const index = data.tasks.findIndex(t => t.id === req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Task not found.' });
 
+    if (req.body.parentId !== undefined) {
+      return res.status(400).json({ error: 'A task\'s parent cannot be changed.' });
+    }
+
     const existing = data.tasks[index];
     if (req.user.role === 'engineer') {
       if (existing.assigneeId !== req.user.personId) {
@@ -360,9 +405,20 @@ router.put('/tasks/:id', async (req, res) => {
     }
 
     if (req.body.assigneeId !== undefined) {
-      const delegationErrorMsg = delegationError(req.user.role, req.body.assigneeId, data.people);
-      if (delegationErrorMsg) {
-        return res.status(403).json({ error: delegationErrorMsg });
+      if (existing.parentId) {
+        const parent = data.tasks.find(t => t.id === existing.parentId);
+        if (!parent || req.user.role !== 'lead' || parent.assigneeId !== req.user.personId) {
+          return res.status(403).json({ error: 'Only the lead assigned to a parent task can reassign its chunks.' });
+        }
+        const chunkIssue = chunkAssigneeIssue(req.body.assigneeId, req.user.personId, data.people);
+        if (chunkIssue) {
+          return res.status(chunkIssue.status).json({ error: chunkIssue.error });
+        }
+      } else {
+        const delegationErrorMsg = delegationError(req.user.role, req.body.assigneeId, data.people);
+        if (delegationErrorMsg) {
+          return res.status(403).json({ error: delegationErrorMsg });
+        }
       }
     }
 
@@ -390,6 +446,11 @@ router.delete('/tasks/:id', requireRole('boss', 'lead'), async (req, res) => {
     const data = await loadData();
     const index = data.tasks.findIndex(t => t.id === req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Task not found.' });
+
+    if (data.tasks.some(t => t.parentId === req.params.id)) {
+      return res.status(409).json({ error: 'This task has delegated chunks. Delete those chunks first.' });
+    }
+
     const deleted = data.tasks.splice(index, 1)[0];
     await saveData(data);
     res.json({ message: 'Task deleted successfully.', task: deleted });
