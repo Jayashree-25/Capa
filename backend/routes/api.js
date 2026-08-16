@@ -76,6 +76,22 @@ const validatePersonInput = (body) => {
   if (typeof capacity !== 'number' || !Number.isFinite(capacity) || capacity <= 0 || capacity > 168) {
     return 'Weekly capacity must be a positive number (hours per week, max 168).';
   }
+  const role = body.role === undefined ? 'member' : body.role;
+  if (role !== 'lead' && role !== 'member') {
+    return 'Role must be either "lead" or "member".';
+  }
+  return null;
+};
+
+// Hierarchy rules: lead -> no manager (reports to Boss); member -> manager must be a lead; solo member -> valid
+const validateHierarchy = (role, managerId, data) => {
+  if (role === 'lead') {
+    if (managerId) return 'Leads report directly to the Boss and cannot have a manager.';
+  } else if (managerId) {
+    const manager = data.people.find(p => p.id === managerId);
+    if (!manager) return 'Manager does not exist.';
+    if (manager.role !== 'lead') return 'A member can only report to a lead.';
+  }
   return null;
 };
 
@@ -118,17 +134,19 @@ router.post('/people', requireRole('boss', 'lead'), async (req, res) => {
     if (error) return res.status(400).json({ error });
 
     const data = await loadData();
+    const role = req.body.role === undefined ? 'member' : req.body.role;
     const managerId = req.body.managerId === undefined ? null : req.body.managerId;
-    if (managerId !== null && !data.people.some(p => p.id === managerId)) {
-      return res.status(400).json({ error: 'Manager does not exist.' });
-    }
+
+    const hierarchyError = validateHierarchy(role, managerId, data);
+    if (hierarchyError) return res.status(400).json({ error: hierarchyError });
 
     const newPerson = {
       id: `p-${Date.now()}`,
       name: req.body.name.trim(),
       team: req.body.team.trim(),
       weeklyCapacity: req.body.weeklyCapacity === undefined ? 40 : req.body.weeklyCapacity,
-      managerId
+      managerId,
+      role
     };
     data.people.push(newPerson);
     await saveData(data);
@@ -148,21 +166,30 @@ router.put('/people/:id', requireRole('boss', 'lead'), async (req, res) => {
     const error = validatePersonInput(merged);
     if (error) return res.status(400).json({ error });
 
-    if (merged.managerId !== undefined && merged.managerId !== null) {
-      if (merged.managerId === req.params.id) {
-        return res.status(400).json({ error: 'A person cannot be their own manager.' });
-      }
-      if (!data.people.some(p => p.id === merged.managerId)) {
-        return res.status(400).json({ error: 'Manager does not exist.' });
+    const newRole = merged.role;
+    const newManagerId = merged.managerId ?? null;
+
+    if (newManagerId === req.params.id) {
+      return res.status(400).json({ error: 'A person cannot be their own manager.' });
+    }
+
+    if (data.people[index].role === 'lead' && newRole === 'member') {
+      const hasReports = data.people.some(p => p.managerId === data.people[index].id);
+      if (hasReports) {
+        return res.status(400).json({ error: 'This lead has team members reporting to them. Reassign those members to another lead first.' });
       }
     }
+
+    const hierarchyError = validateHierarchy(newRole, newManagerId, data);
+    if (hierarchyError) return res.status(400).json({ error: hierarchyError });
 
     data.people[index] = {
       id: data.people[index].id,
       name: merged.name.trim(),
       team: merged.team.trim(),
       weeklyCapacity: merged.weeklyCapacity,
-      managerId: merged.managerId ?? null
+      managerId: newManagerId,
+      role: newRole
     };
     await saveData(data);
     res.json(data.people[index]);
@@ -179,6 +206,10 @@ router.delete('/people/:id', requireRole('boss', 'lead'), async (req, res) => {
 
     if (data.tasks.some(t => t.assigneeId === req.params.id)) {
       return res.status(409).json({ error: 'Cannot delete: tasks are still assigned to this person. Reassign or delete those tasks first.' });
+    }
+
+    if (data.people.some(p => p.managerId === req.params.id)) {
+      return res.status(409).json({ error: 'Cannot delete: people still report to this person. Reassign them to another lead first.' });
     }
 
     const deleted = data.people.splice(index, 1)[0];
