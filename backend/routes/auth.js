@@ -58,10 +58,16 @@ router.post('/register', requireAuth, requireRole('boss'), async (req, res) => {
       return res.status(409).json({ error: 'A user with this email already exists.' });
     }
 
+    let finalRole = role;
     if (personId) {
-      const person = await pool.query('SELECT id FROM people WHERE id = $1', [personId]);
+      const person = await pool.query('SELECT id, role FROM people WHERE id = $1', [personId]);
       if (person.rowCount === 0) {
         return res.status(400).json({ error: 'Person does not exist.' });
+      }
+      if (person.rows[0].role === 'lead') {
+        finalRole = 'lead';
+      } else if (role === 'lead') {
+        return res.status(400).json({ error: 'A member cannot have a lead account. Mark this person as a lead first.' });
       }
       const linked = await pool.query('SELECT 1 FROM users WHERE person_id = $1', [personId]);
       if (linked.rowCount > 0) {
@@ -73,7 +79,7 @@ router.post('/register', requireAuth, requireRole('boss'), async (req, res) => {
     const passwordHash = await bcrypt.hash(password, 10);
     await pool.query(
       'INSERT INTO users (id, email, password_hash, role, person_id) VALUES ($1, $2, $3, $4, $5)',
-      [id, normalizedEmail, passwordHash, role, personId || null]
+      [id, normalizedEmail, passwordHash, finalRole, personId || null]
     );
     res.status(201).json(toPublicUser(await findUserById(id)));
   } catch (err) {
