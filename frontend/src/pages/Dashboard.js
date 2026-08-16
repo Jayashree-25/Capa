@@ -406,6 +406,7 @@ const Dashboard = ({ user }) => {
             onClose={() => setPersonModalOpen(false)}
             onCreated={handleCreatedPerson}
             teams={teamNames}
+            people={people}
           />
           <ProjectFormModal
             isOpen={projectModalOpen}
