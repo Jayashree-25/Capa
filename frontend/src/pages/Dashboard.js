@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, Fragment } from 'react';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { Spinner } from '../components/Spinner';
@@ -13,6 +13,7 @@ import {
   todayMonday, firstOfMonth, addWeeks, addMonths, buildBuckets,
   formatWeekLabel, formatMonthLabel, toISO
 } from '../utils/dateUtils';
+import { buildHierarchyRows } from '../utils/hierarchy';
 
 const WEEK_COUNT = 6;
 const MONTH_COUNT = 3;
@@ -33,6 +34,7 @@ const getDraggedTaskId = (dataTransfer) => {
 };
 
 const Dashboard = ({ user }) => {
+  const isBoss = user.role === 'boss';
   const canManage = user.role === 'boss' || user.role === 'lead';
   const [people, setPeople] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -51,6 +53,7 @@ const Dashboard = ({ user }) => {
   const [personModalOpen, setPersonModalOpen] = useState(false);
   const [projectModalOpen, setProjectModalOpen] = useState(false);
   const [dropTarget, setDropTarget] = useState(null);
+  const [collapsedLeads, setCollapsedLeads] = useState(() => new Set());
 
   const buckets = buildBuckets(granularity, periodStart, granularity === 'week' ? WEEK_COUNT : MONTH_COUNT);
 
@@ -143,6 +146,15 @@ const Dashboard = ({ user }) => {
     setPeriodStart(prev => granularity === 'week' ? addWeeks(prev, dir * WEEK_COUNT) : addMonths(prev, dir * MONTH_COUNT));
   };
 
+  const toggleLead = (leadId) => {
+    setCollapsedLeads(prev => {
+      const next = new Set(prev);
+      if (next.has(leadId)) next.delete(leadId);
+      else next.add(leadId);
+      return next;
+    });
+  };
+
   const rangeLabel = granularity === 'week'
     ? `${formatWeekLabel(buckets[0])} – ${formatWeekLabel(buckets[buckets.length - 1])}, ${buckets[0].slice(0, 4)}`
     : `${formatMonthLabel(buckets[0])} – ${formatMonthLabel(buckets[buckets.length - 1])}`;
@@ -165,6 +177,64 @@ const Dashboard = ({ user }) => {
   if (loading) return <div className="p-4 text-center flex justify-center"><Spinner /></div>;
 
   const groups = taskGroups();
+  const hierarchyRows = isBoss && report ? buildHierarchyRows(report.people) : [];
+
+  const renderPersonRow = (person, { isLead = false, isMember = false, hasMembers = false, collapsed = false } = {}) => (
+    <tr
+      key={person.id}
+      onDragOver={(e) => { e.preventDefault(); setDropTarget(person.id); }}
+      onDragLeave={() => setDropTarget(prev => prev === person.id ? null : prev)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDropTarget(null);
+        const taskId = getDraggedTaskId(e.dataTransfer);
+        if (taskId) handleReassign(taskId, person.id);
+      }}
+      className={`border-b border-gray-100 ${person.overloaded ? 'bg-red-50' : ''} ${dropTarget === person.id ? 'bg-blue-100 ring-2 ring-blue-400' : ''}`}
+    >
+      <td className={`p-2.5 ${isMember ? 'pl-10' : ''}`}>
+        <div className="flex items-center gap-2">
+          {isLead && hasMembers && (
+            <button
+              onClick={() => toggleLead(person.id)}
+              className="w-4 text-gray-400 hover:text-gray-600 text-xs leading-none text-center"
+              title={collapsed ? 'Expand members' : 'Collapse members'}
+            >
+              {collapsed ? '▸' : '▾'}
+            </button>
+          )}
+          <span className={isMember ? 'font-medium text-gray-700' : 'font-semibold text-gray-900'}>{person.name}</span>
+          {isLead && <span className="text-xs font-medium bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">Lead</span>}
+          {person.overloaded && <span className="text-xs font-medium bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Overloaded</span>}
+          {canManage && (
+            <button
+              onClick={() => handleDeletePerson(person)}
+              className="text-gray-300 hover:text-red-500"
+              title="Delete person"
+            >✕</button>
+          )}
+        </div>
+      </td>
+      <td className="p-2.5 text-gray-600">{person.team}</td>
+      <td className="p-2.5 text-right">{person.weeklyCapacity}h</td>
+      {person.buckets.map(bucket => (
+        <td key={bucket.key} className={`p-2 text-center border rounded m-0 ${cellStyle(bucket)}`}>
+          <span className="font-semibold">{bucket.assignedHours}h</span>
+          {granularity === 'week' && (
+            <span className="block text-[11px] opacity-70">of {bucket.capacityHours}h</span>
+          )}
+        </td>
+      ))}
+      <td className={`p-2.5 text-right font-semibold ${person.totalAssignedHours > person.totalCapacityHours ? 'text-red-600' : ''}`}>
+        {person.totalAssignedHours}h
+      </td>
+      <td className="p-2.5 text-center">
+        {person.overloaded
+          ? <span className="inline-block bg-red-600 text-white text-xs px-2 py-0.5 rounded-full">Overloaded</span>
+          : <span className="inline-block bg-green-600 text-white text-xs px-2 py-0.5 rounded-full">OK</span>}
+      </td>
+    </tr>
+  );
 
   return (
     <div className="space-y-6">
@@ -260,52 +330,20 @@ const Dashboard = ({ user }) => {
               </tr>
             </thead>
             <tbody>
-              {report && report.people.map(person => (
-                <tr
-                  key={person.id}
-                  onDragOver={(e) => { e.preventDefault(); setDropTarget(person.id); }}
-                  onDragLeave={() => setDropTarget(prev => prev === person.id ? null : prev)}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    setDropTarget(null);
-                    const taskId = getDraggedTaskId(e.dataTransfer);
-                    if (taskId) handleReassign(taskId, person.id);
-                  }}
-                  className={`border-b border-gray-100 ${person.overloaded ? 'bg-red-50' : ''} ${dropTarget === person.id ? 'bg-blue-100 ring-2 ring-blue-400' : ''}`}
-                >
-                  <td className="p-2.5">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-gray-900">{person.name}</span>
-                      {person.overloaded && <span className="text-xs font-medium bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Overloaded</span>}
-                      {canManage && (
-                        <button
-                          onClick={() => handleDeletePerson(person)}
-                          className="text-gray-300 hover:text-red-500"
-                          title="Delete person"
-                        >✕</button>
-                      )}
-                    </div>
-                  </td>
-                  <td className="p-2.5 text-gray-600">{person.team}</td>
-                  <td className="p-2.5 text-right">{person.weeklyCapacity}h</td>
-                  {person.buckets.map(bucket => (
-                    <td key={bucket.key} className={`p-2 text-center border rounded m-0 ${cellStyle(bucket)}`}>
-                      <span className="font-semibold">{bucket.assignedHours}h</span>
-                      {granularity === 'week' && (
-                        <span className="block text-[11px] opacity-70">of {bucket.capacityHours}h</span>
-                      )}
-                    </td>
-                  ))}
-                  <td className={`p-2.5 text-right font-semibold ${person.totalAssignedHours > person.totalCapacityHours ? 'text-red-600' : ''}`}>
-                    {person.totalAssignedHours}h
-                  </td>
-                  <td className="p-2.5 text-center">
-                    {person.overloaded
-                      ? <span className="inline-block bg-red-600 text-white text-xs px-2 py-0.5 rounded-full">Overloaded</span>
-                      : <span className="inline-block bg-green-600 text-white text-xs px-2 py-0.5 rounded-full">OK</span>}
-                  </td>
-                </tr>
-              ))}
+              {isBoss && report
+                ? hierarchyRows.map(row => {
+                    if (row.kind === 'lead') {
+                      const collapsed = collapsedLeads.has(row.person.id);
+                      return (
+                        <Fragment key={row.person.id}>
+                          {renderPersonRow(row.person, { isLead: true, hasMembers: row.members.length > 0, collapsed })}
+                          {!collapsed && row.members.map(member => renderPersonRow(member, { isMember: true }))}
+                        </Fragment>
+                      );
+                    }
+                    return renderPersonRow(row.person);
+                  })
+                : report && report.people.map(person => renderPersonRow(person))}
               {report && (
                 <tr className="bg-gray-100 font-semibold border-t-2 border-gray-200">
                   <td className="p-2.5" colSpan="3">Team total</td>
