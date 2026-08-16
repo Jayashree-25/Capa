@@ -492,3 +492,69 @@ test('boss delegation: tasks can be assigned to leads and solo members only', as
   const metaOnly = await json('PUT', '/tasks/t-1', { title: 'Renamed by boss' });
   assert.strictEqual(metaOnly.status, 200);
 });
+
+// ---------- Lead delegation: parent tasks & chunks ----------
+test('lead delegation: parent tasks can be broken into chunks (one level)', async () => {
+  const lead = await (await json('POST', '/people', { name: 'Chunk Lead', team: 'Omega', role: 'lead' })).json();
+  const m1 = await (await json('POST', '/people', { name: 'Chunk Member One', team: 'Omega', role: 'member', managerId: lead.id })).json();
+  const otherLead = await (await json('POST', '/people', { name: 'Other Chunk Lead', team: 'Omega', role: 'lead' })).json();
+  const otherMember = await (await json('POST', '/people', { name: 'Other Chunk Member', team: 'Omega', role: 'member', managerId: otherLead.id })).json();
+  const solo = await (await json('POST', '/people', { name: 'Chunk Solo', team: 'Omega' })).json();
+
+  const parentRes = await json('POST', '/tasks', { title: 'Build E-Commerce', projectId: 'pr-1', assigneeId: lead.id, estimatedHours: 30, week: '2026-08-10' });
+  assert.strictEqual(parentRes.status, 201);
+  const parent = await parentRes.json();
+
+  const pool = getPool();
+  const hash = await bcrypt.hash('chunk-pass-123', 10);
+  await pool.query(
+    'INSERT INTO users (id, email, password_hash, role, person_id) VALUES ($1,$2,$3,$4,$5)',
+    ['u-chunk-lead', 'chunklead@capa.test', hash, 'lead', lead.id]
+  );
+  const login = await apiFetch('/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'chunklead@capa.test', password: 'chunk-pass-123' })
+  });
+  const leadToken = (await login.json()).token;
+  const leadReq = (pathname, opts = {}) => fetch(`${base}${pathname}`, {
+    ...opts,
+    headers: { ...(opts.headers || {}), Authorization: `Bearer ${leadToken}` }
+  });
+  const leadJson = (method, pathname, body) => leadReq(pathname, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  const c1 = await leadJson('POST', '/tasks', { title: 'Login UI', parentId: parent.id, assigneeId: m1.id, estimatedHours: 8, week: '2026-08-10' });
+  assert.strictEqual(c1.status, 201);
+  const chunk1 = await c1.json();
+  assert.strictEqual(chunk1.parentId, parent.id);
+  assert.strictEqual(chunk1.projectId, 'pr-1');
+
+  assert.strictEqual((await leadJson('POST', '/tasks', { title: 'API Integration', parentId: parent.id, assigneeId: lead.id, estimatedHours: 6, week: '2026-08-10' })).status, 201);
+
+  assert.strictEqual((await leadJson('POST', '/tasks', { title: 'Bad other member', parentId: parent.id, assigneeId: otherMember.id, estimatedHours: 5, week: '2026-08-10' })).status, 403);
+  assert.strictEqual((await leadJson('POST', '/tasks', { title: 'Bad other lead', parentId: parent.id, assigneeId: otherLead.id, estimatedHours: 5, week: '2026-08-10' })).status, 403);
+  assert.strictEqual((await leadJson('POST', '/tasks', { title: 'Bad solo', parentId: parent.id, assigneeId: solo.id, estimatedHours: 5, week: '2026-08-10' })).status, 403);
+  assert.strictEqual((await leadJson('POST', '/tasks', { title: 'Bad no assignee', parentId: parent.id, assigneeId: null, estimatedHours: 5, week: '2026-08-10' })).status, 400);
+  assert.strictEqual((await leadJson('POST', '/tasks', { title: 'Bad grandchild', parentId: chunk1.id, assigneeId: m1.id, estimatedHours: 5, week: '2026-08-10' })).status, 400);
+  assert.strictEqual((await leadJson('POST', '/tasks', { title: 'Bad parent owner', parentId: 't-1', assigneeId: m1.id, estimatedHours: 5, week: '2026-08-10' })).status, 403);
+  assert.strictEqual((await json('POST', '/tasks', { title: 'Bad boss chunk', parentId: parent.id, assigneeId: lead.id, estimatedHours: 5, week: '2026-08-10' })).status, 403);
+
+  const tasks = await (await leadReq('/tasks')).json();
+  assert.strictEqual(tasks.find(t => t.id === chunk1.id).parentTitle, 'Build E-Commerce');
+
+  assert.strictEqual((await leadJson('PUT', `/tasks/${chunk1.id}`, { assigneeId: otherMember.id })).status, 403);
+  assert.strictEqual((await leadJson('PUT', `/tasks/${chunk1.id}`, { assigneeId: lead.id })).status, 200);
+  assert.strictEqual((await json('PUT', `/tasks/${chunk1.id}`, { assigneeId: lead.id })).status, 403);
+  assert.strictEqual((await json('PUT', `/tasks/${chunk1.id}`, { parentId: parent.id })).status, 400);
+
+  assert.strictEqual((await request(`/tasks/${parent.id}`, { method: 'DELETE' })).status, 409);
+  assert.strictEqual((await request(`/tasks/${chunk1.id}`, { method: 'DELETE' })).status, 200);
+
+  const report = await (await request('/reports/load?granularity=week&from=2026-08-10&to=2026-08-10&team=Omega')).json();
+  const leadRow = report.people.find(p => p.id === lead.id);
+  assert.strictEqual(leadRow.totalAssignedHours, 36);
+});
