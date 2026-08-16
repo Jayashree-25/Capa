@@ -436,6 +436,7 @@ const Dashboard = ({ user }) => {
         projects={projects}
         currentMonday={toISO(todayMonday())}
         assigneeLock={canManage ? null : user.personId}
+        isBoss={isBoss}
       />
       {canManage && (
         <>
