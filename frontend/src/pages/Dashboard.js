@@ -5,6 +5,7 @@ import { Spinner } from '../components/Spinner';
 import PersonFormModal from '../components/PersonFormModal';
 import ProjectFormModal from '../components/ProjectFormModal';
 import TaskFormModal from '../components/TaskFormModal';
+import ChunkFormModal from '../components/ChunkFormModal';
 import {
   getPeople, getProjects, getTasks, getTeamNames, getLoadReport,
   updateTask, deleteTask, deletePerson
@@ -52,6 +53,8 @@ const Dashboard = ({ user }) => {
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [personModalOpen, setPersonModalOpen] = useState(false);
   const [projectModalOpen, setProjectModalOpen] = useState(false);
+  const [chunkModalOpen, setChunkModalOpen] = useState(false);
+  const [chunkParent, setChunkParent] = useState(null);
   const [dropTarget, setDropTarget] = useState(null);
   const [collapsedLeads, setCollapsedLeads] = useState(() => new Set());
 
@@ -141,6 +144,15 @@ const Dashboard = ({ user }) => {
     getTasks().then(res => setTasks(res.data));
     refreshReport();
   };
+
+  const openChunkModal = (task) => {
+    setChunkParent(task);
+    setChunkModalOpen(true);
+  };
+
+  const chunkAssignees = user.role === 'lead'
+    ? people.filter(p => p.id === user.personId || p.managerId === user.personId)
+    : [];
 
   const navigate = (dir) => {
     setPeriodStart(prev => granularity === 'week' ? addWeeks(prev, dir * WEEK_COUNT) : addMonths(prev, dir * MONTH_COUNT));
@@ -408,10 +420,20 @@ const Dashboard = ({ user }) => {
                       title={canManage ? 'Drag to another person to reassign' : 'Read-only view'}
                     >
                       <span className="text-gray-400">⋮⋮</span>
+                      {task.parentId && <span className="text-xs text-gray-400">↳</span>}
                       <span className="font-medium text-gray-800">{task.title}</span>
-                      <span className="text-xs text-gray-500">{task.projectName}</span>
+                      {task.parentId
+                        ? <span className="text-xs text-gray-400 italic">chunk of {task.parentTitle}</span>
+                        : <span className="text-xs text-gray-500">{task.projectName}</span>}
                       <span className="text-xs text-blue-600 font-semibold">{task.estimatedHours}h</span>
                       <span className="text-xs text-gray-400">{formatWeekLabel(task.week)}</span>
+                      {user.role === 'lead' && !task.parentId && task.assigneeId === user.personId && (
+                        <button
+                          onClick={() => openChunkModal(task)}
+                          className="text-gray-400 hover:text-blue-600 ml-1"
+                          title="Break into chunks"
+                        >+</button>
+                      )}
                       {canManage && (
                         <button
                           onClick={() => handleDeleteTask(task)}
@@ -437,6 +459,14 @@ const Dashboard = ({ user }) => {
         currentMonday={toISO(todayMonday())}
         assigneeLock={canManage ? null : user.personId}
         isBoss={isBoss}
+      />
+      <ChunkFormModal
+        isOpen={chunkModalOpen}
+        onClose={() => setChunkModalOpen(false)}
+        onCreated={handleCreatedTask}
+        parentTask={chunkParent}
+        people={chunkAssignees}
+        currentMonday={toISO(todayMonday())}
       />
       {canManage && (
         <>
