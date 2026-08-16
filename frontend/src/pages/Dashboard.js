@@ -32,7 +32,7 @@ const getDraggedTaskId = (dataTransfer) => {
   return plain && plain.startsWith('t-') ? plain : null;
 };
 
-const Dashboard = ({ user, onLogout }) => {
+const Dashboard = ({ user }) => {
   const canManage = user.role === 'boss' || user.role === 'lead';
   const [people, setPeople] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -167,7 +167,7 @@ const Dashboard = ({ user, onLogout }) => {
   const groups = taskGroups();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6 space-y-6">
+    <div className="space-y-6">
       {error && (
         <div className="bg-red-100 text-red-800 p-3 rounded flex justify-between">
           <span>{error}</span>
@@ -175,17 +175,12 @@ const Dashboard = ({ user, onLogout }) => {
         </div>
       )}
 
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-gray-800">Capacity Planner</h1>
+      <div className="flex flex-wrap justify-between items-center gap-3">
+        <h1 className="text-2xl font-semibold text-gray-800">Dashboard</h1>
         <div className="flex items-center gap-3">
-          <span className="text-sm text-gray-600 bg-white rounded px-3 py-2 border">
-            {user.personName || user.email}
-            <span className="text-gray-400"> · {user.role}</span>
-          </span>
           <Button onClick={() => setTaskModalOpen(true)} className="bg-green-600 hover:bg-green-700">+ Add Task</Button>
           {canManage && <Button onClick={() => setPersonModalOpen(true)}>+ Add Person</Button>}
           {canManage && <Button onClick={() => setProjectModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700">+ Add Project</Button>}
-          <Button onClick={onLogout} className="bg-gray-600 hover:bg-gray-700">Logout</Button>
         </div>
       </div>
 
