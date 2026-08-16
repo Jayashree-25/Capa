@@ -11,7 +11,8 @@ const loadData = async () => {
     pool.query('SELECT id, name FROM projects ORDER BY name'),
     pool.query(`
       SELECT id, title, project_id AS "projectId", assignee_id AS "assigneeId",
-             estimated_hours AS "estimatedHours", to_char(week, 'YYYY-MM-DD') AS week
+             estimated_hours AS "estimatedHours", to_char(week, 'YYYY-MM-DD') AS week,
+             parent_id AS "parentId"
       FROM tasks
     `)
   ]);
@@ -69,15 +70,16 @@ const saveData = async (data) => {
 
     for (const t of data.tasks || []) {
       await client.query(`
-        INSERT INTO tasks (id, title, project_id, assignee_id, estimated_hours, week)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO tasks (id, title, project_id, assignee_id, estimated_hours, week, parent_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         ON CONFLICT (id) DO UPDATE SET
           title = EXCLUDED.title,
           project_id = EXCLUDED.project_id,
           assignee_id = EXCLUDED.assignee_id,
           estimated_hours = EXCLUDED.estimated_hours,
-          week = EXCLUDED.week
-      `, [t.id, t.title, t.projectId, t.assigneeId ?? null, t.estimatedHours, t.week]);
+          week = EXCLUDED.week,
+          parent_id = EXCLUDED.parent_id
+      `, [t.id, t.title, t.projectId, t.assigneeId ?? null, t.estimatedHours, t.week, t.parentId ?? null]);
     }
 
     await client.query('COMMIT');
