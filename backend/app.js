@@ -17,13 +17,15 @@ app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000' // Configure allowed origins
 }));
 
-// 2. Rate Limiting (100 requests per 15 minutes)
+// 2. Rate Limiting (100 requests per 15 minutes; skipped in test environment)
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
   message: 'Too many requests from this IP. Please try again later.'
 });
-app.use(limiter);
+if (process.env.NODE_ENV !== 'test') {
+  app.use(limiter);
+}
 
 // 3. Logging (skip in test environment)
 if (process.env.NODE_ENV !== 'test') {
