@@ -6,13 +6,25 @@
 }
 
 :root {
-  /* ====== COLOR VARIABLES ====== */
-  --primary: #4e79a7;
-  --secondary: #6b8e23;
-  --text: #333333;
-  --text-light: #666666;
-  --background: #ffffff;
-  --error: #dc3545;
+  /* ====== DESIGN TOKENS ====== */
+  /* Primary accent (blue-600) — the single Capa action color */
+  --primary: #2563eb;
+  /* Background / surface */
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  /* Borders */
+  --border: #e5e7eb;
+  /* Text */
+  --text: #1f2937;
+  --text-muted: #6b7280;
+  /* Semantic */
+  --success: #16a34a;
+  --warning: #d97706;
+  --danger: #dc2626;
+  /* Radius scale */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
 }
 
 /* ====== BASE STYLES ====== */
@@ -20,7 +32,7 @@ body {
   font-family: 'Inter', -apple-system, sans-serif;
   line-height: 1.6;
   color: var(--text);
-  background-color: #f5f7fa; /* Light gray background */
+  background-color: var(--bg); /* Light gray background */
 }
 
 /* ====== TYPOGRAPHY ====== */
