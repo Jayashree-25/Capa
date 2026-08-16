@@ -459,6 +459,8 @@ router.get('/reports/load', async (req, res) => {
         id: p.id,
         name: p.name,
         team: p.team,
+        role: p.role,
+        managerId: p.managerId,
         weeklyCapacity: p.weeklyCapacity,
         buckets: bucketsReport,
         totalAssignedHours,
