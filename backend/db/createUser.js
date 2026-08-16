@@ -16,7 +16,7 @@ const parseArgs = (argv) => {
 };
 
 (async () => {
-  const { email, password, role = 'engineer', personId } = parseArgs(process.argv);
+  let { email, password, role = 'engineer', personId } = parseArgs(process.argv);
   if (!email || !password) {
     console.error('Usage: npm run create:user -- --email you@example.com --password secret123 [--role boss|lead|engineer] [--personId p-...]');
     process.exit(1);
@@ -41,9 +41,15 @@ const parseArgs = (argv) => {
   }
 
   if (personId) {
-    const person = await pool.query('SELECT id FROM people WHERE id = $1', [personId]);
+    const person = await pool.query('SELECT id, role FROM people WHERE id = $1', [personId]);
     if (person.rowCount === 0) {
       console.error(`No person with id ${personId}. List people via GET /api/people.`);
+      process.exit(1);
+    }
+    if (person.rows[0].role === 'lead') {
+      role = 'lead';
+    } else if (role === 'lead') {
+      console.error(`Cannot assign a lead account to a member person. Mark ${personId} as a lead first.`);
       process.exit(1);
     }
   }
