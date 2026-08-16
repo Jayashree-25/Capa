@@ -116,6 +116,15 @@ const validateTaskInput = (body, data) => {
   return null;
 };
 
+// Boss delegation rule: a boss may only assign tasks to a lead or a solo member
+// (a member who does not report to a lead). Members under a lead are off-limits.
+const delegationError = (role, assigneeId, people) => {
+  if (role !== 'boss' || assigneeId === null || assigneeId === undefined) return null;
+  const assignee = people.find(p => p.id === assigneeId);
+  if (!assignee || assignee.role === 'lead' || !assignee.managerId) return null;
+  return 'A boss can only assign tasks to a lead or a solo member (a member who does not report to a lead).';
+};
+
 // ---------- People ----------
 router.get('/people', async (req, res) => {
   try {
@@ -313,6 +322,11 @@ router.post('/tasks', async (req, res) => {
       return res.status(403).json({ error: 'Engineers can only assign tasks to themselves.' });
     }
 
+    const delegationErrorMsg = delegationError(req.user.role, assigneeId, data.people);
+    if (delegationErrorMsg) {
+      return res.status(403).json({ error: delegationErrorMsg });
+    }
+
     const newTask = {
       id: `t-${Date.now()}`,
       title: title.trim(),
@@ -342,6 +356,13 @@ router.put('/tasks/:id', async (req, res) => {
       }
       if (req.body.assigneeId !== undefined && req.body.assigneeId !== req.user.personId) {
         return res.status(403).json({ error: 'Engineers can only keep tasks assigned to themselves.' });
+      }
+    }
+
+    if (req.body.assigneeId !== undefined) {
+      const delegationErrorMsg = delegationError(req.user.role, req.body.assigneeId, data.people);
+      if (delegationErrorMsg) {
+        return res.status(403).json({ error: delegationErrorMsg });
       }
     }
 
