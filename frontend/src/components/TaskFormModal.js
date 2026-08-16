@@ -50,26 +50,26 @@ const TaskFormModal = ({ isOpen, onClose, onCreated, people = [], projects = [],
   return (
     <Modal isOpen={isOpen} onClose={onClose} ariaLabel="Add task">
       <div className="space-y-4">
-        <h2 className="text-2xl font-bold text-gray-800">Add Task</h2>
-        {error && <div className="text-red-500 text-sm">{error}</div>}
+        <h2 className="text-xl font-semibold text-gray-800">Add Task</h2>
+        {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-md">{error}</div>}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Task title</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Task title</label>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full p-2 border rounded"
+              className="w-full h-11 px-3.5 rounded-md border border-gray-300 bg-white text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none transition"
               required
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Project</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Project</label>
               <select
                 value={projectId}
                 onChange={(e) => setProjectId(e.target.value)}
-                className="w-full p-2 border rounded"
+                className="w-full h-11 px-3.5 rounded-md border border-gray-300 bg-white text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none transition"
                 required
               >
                 <option value="">Select project…</option>
@@ -77,19 +77,19 @@ const TaskFormModal = ({ isOpen, onClose, onCreated, people = [], projects = [],
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Assignee</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Assignee</label>
               {assigneeLock ? (
                 <input
                   type="text"
                   value={people.find(p => p.id === assigneeLock)?.name || ''}
                   disabled
-                  className="w-full p-2 border rounded bg-gray-100 text-gray-600"
+                  className="w-full h-11 px-3.5 rounded-md border border-gray-300 bg-gray-100 text-sm text-gray-600"
                 />
               ) : (
                 <select
                   value={assigneeId}
                   onChange={(e) => setAssigneeId(e.target.value)}
-                  className="w-full p-2 border rounded"
+                  className="w-full h-11 px-3.5 rounded-md border border-gray-300 bg-white text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none transition"
                 >
                   <option value="">Unassigned</option>
                   {people.map(p => <option key={p.id} value={p.id}>{p.name} ({p.team})</option>)}
@@ -99,29 +99,29 @@ const TaskFormModal = ({ isOpen, onClose, onCreated, people = [], projects = [],
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Estimated hours</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Estimated hours</label>
               <input
                 type="number"
                 min="1"
                 value={estimatedHours}
                 onChange={(e) => setEstimatedHours(e.target.value)}
-                className="w-full p-2 border rounded"
+                className="w-full h-11 px-3.5 rounded-md border border-gray-300 bg-white text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none transition"
                 required
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Week (any day)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Week (any day)</label>
               <input
                 type="date"
                 value={week}
                 onChange={(e) => setWeek(e.target.value)}
-                className="w-full p-2 border rounded"
+                className="w-full h-11 px-3.5 rounded-md border border-gray-300 bg-white text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none transition"
                 required
               />
             </div>
           </div>
           <div className="flex justify-end space-x-2 pt-2">
-            <Button type="button" onClick={onClose} className="bg-gray-300 hover:bg-gray-400">Cancel</Button>
+            <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
             <Button type="submit" disabled={submitting}>{submitting ? 'Saving…' : 'Add Task'}</Button>
           </div>
         </form>
