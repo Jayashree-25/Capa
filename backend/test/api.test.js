@@ -250,7 +250,7 @@ test('POST /api/tasks validates and normalizes the week to Monday', async () => 
   const res = await json('POST', '/tasks', {
     title: 'Landing page',
     projectId: 'pr-1',
-    assigneeId: 'p-2',
+    assigneeId: 'p-1',
     estimatedHours: 12,
     week: '2026-08-16'
   });
@@ -308,10 +308,10 @@ test('GET /api/reports/load month granularity uses weekly capacity x weeks', asy
 });
 
 test('PUT /api/tasks/:id reassigns tasks between people', async () => {
-  const res = await json('PUT', '/tasks/t-1', { assigneeId: 'p-2' });
+  const res = await json('PUT', '/tasks/t-1', { assigneeId: 'p-9' });
   assert.strictEqual(res.status, 200);
   const updated = await (await request('/tasks')).json();
-  assert.strictEqual(updated.find(t => t.id === 't-1').assigneeName, 'Bob');
+  assert.strictEqual(updated.find(t => t.id === 't-1').assigneeName, 'Zara');
 
   const missing = await json('PUT', '/tasks/nope', { assigneeId: 'p-2' });
   assert.strictEqual(missing.status, 404);
@@ -358,9 +358,6 @@ test('scoped views: lead sees their subtree, engineer sees only themselves', asy
     ['u-eng', 'eng@capa.test', hash, 'engineer', empA.id]
   );
 
-  await json('POST', '/tasks', { title: 'EmpA task', projectId: 'pr-1', assigneeId: empA.id, estimatedHours: 5, week: '2026-08-10' });
-  const empBtask = await (await json('POST', '/tasks', { title: 'EmpB task', projectId: 'pr-1', assigneeId: empB.id, estimatedHours: 6, week: '2026-08-10' })).json();
-
   const loginAs = async (email) => {
     const res = await apiFetch('/auth/login', {
       method: 'POST',
@@ -378,6 +375,9 @@ test('scoped views: lead sees their subtree, engineer sees only themselves', asy
   });
   const leadReq = authed(leadToken);
   const engReq = authed(engToken);
+
+  await leadReq('/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'EmpA task', projectId: 'pr-1', assigneeId: empA.id, estimatedHours: 5, week: '2026-08-10' }) });
+  const empBtask = await (await leadReq('/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'EmpB task', projectId: 'pr-1', assigneeId: empB.id, estimatedHours: 6, week: '2026-08-10' }) })).json();
 
   const leadPeople = await (await leadReq('/people')).json();
   assert.deepStrictEqual(leadPeople.map(p => p.id).sort(), [empA.id, empB.id, mgr.id].sort());
@@ -466,4 +466,29 @@ test('register syncs the account role to the person role', async () => {
 
   const member = await (await json('POST', '/people', { name: 'Account Member', team: 'Omega' })).json();
   assert.strictEqual((await json('POST', '/auth/register', { email: 'accountmember@capa.test', password: 'account-member-123', role: 'lead', personId: member.id })).status, 400);
+});
+
+// ---------- Boss delegation rules ----------
+test('boss delegation: tasks can be assigned to leads and solo members only', async () => {
+  const lead = await (await json('POST', '/people', { name: 'Delegation Lead', team: 'Omega', role: 'lead' })).json();
+  const member = await (await json('POST', '/people', { name: 'Delegation Member', team: 'Omega', role: 'member', managerId: lead.id })).json();
+  const solo = await (await json('POST', '/people', { name: 'Delegation Solo', team: 'Omega' })).json();
+
+  const toLead = await json('POST', '/tasks', { title: 'To lead', projectId: 'pr-1', assigneeId: lead.id, estimatedHours: 5, week: '2026-08-10' });
+  assert.strictEqual(toLead.status, 201);
+
+  const toSolo = await json('POST', '/tasks', { title: 'To solo', projectId: 'pr-1', assigneeId: solo.id, estimatedHours: 5, week: '2026-08-10' });
+  assert.strictEqual(toSolo.status, 201);
+
+  const toMember = await json('POST', '/tasks', { title: 'To member', projectId: 'pr-1', assigneeId: member.id, estimatedHours: 5, week: '2026-08-10' });
+  assert.strictEqual(toMember.status, 403);
+
+  const reassigned = await json('PUT', '/tasks/t-1', { assigneeId: member.id });
+  assert.strictEqual(reassigned.status, 403);
+
+  const reassignedOk = await json('PUT', '/tasks/t-1', { assigneeId: lead.id });
+  assert.strictEqual(reassignedOk.status, 200);
+
+  const metaOnly = await json('PUT', '/tasks/t-1', { title: 'Renamed by boss' });
+  assert.strictEqual(metaOnly.status, 200);
 });
