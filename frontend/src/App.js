@@ -2,13 +2,13 @@ import React, { useState } from 'react';
 import { BrowserRouter as Router, Switch, Route, Redirect } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
+import People from './pages/People';
 import Shell from './components/Shell';
 import Placeholder from './pages/Placeholder';
 import NotFound from './pages/NotFound';
 import { getUser, clearAuth } from './services/auth';
 
 const PLACEHOLDER_PAGES = [
-  { path: '/people', title: 'People' },
   { path: '/tasks', title: 'Tasks' },
   { path: '/projects', title: 'Projects' },
   { path: '/organization', title: 'Organization' }
@@ -33,6 +33,7 @@ function App() {
             <Shell user={user} onLogout={handleLogout}>
               <Switch>
                 <Route exact path="/dashboard" render={() => <Dashboard user={user} />} />
+                <Route exact path="/people" render={() => <People />} />
                 {PLACEHOLDER_PAGES.map(page => (
                   <Route key={page.path} exact path={page.path} render={() => <Placeholder title={page.title} />} />
                 ))}
