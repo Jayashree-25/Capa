@@ -188,6 +188,8 @@ const Dashboard = ({ user }) => {
 
   if (loading) return <div className="p-4 text-center flex justify-center"><Spinner /></div>;
 
+  const delegatedParentIds = new Set(tasks.filter(t => t.parentId).map(t => t.parentId));
+
   const groups = taskGroups();
   const hierarchyRows = isBoss && report ? buildHierarchyRows(report.people) : [];
 
@@ -408,41 +410,47 @@ const Dashboard = ({ user }) => {
                   {person && <span className="ml-2 text-xs font-normal text-gray-500">{person.team}</span>}
                 </h3>
                 <div className="flex flex-wrap gap-2">
-                  {groupTasks.map(task => (
-                    <span
-                      key={task.id}
-                      draggable={canManage}
-                      onDragStart={(e) => {
-                        e.dataTransfer.setData(TASK_DRAG_TYPE, task.id);
-                        e.dataTransfer.setData('text/plain', task.id);
-                      }}
-                      className="inline-flex items-center gap-2 bg-white border border-gray-300 rounded-full px-3 py-1 text-sm cursor-grab hover:border-blue-400"
-                      title={canManage ? 'Drag to another person to reassign' : 'Read-only view'}
-                    >
-                      <span className="text-gray-400">⋮⋮</span>
-                      {task.parentId && <span className="text-xs text-gray-400">↳</span>}
-                      <span className="font-medium text-gray-800">{task.title}</span>
-                      {task.parentId
-                        ? <span className="text-xs text-gray-400 italic">chunk of {task.parentTitle}</span>
-                        : <span className="text-xs text-gray-500">{task.projectName}</span>}
-                      <span className="text-xs text-blue-600 font-semibold">{task.estimatedHours}h</span>
-                      <span className="text-xs text-gray-400">{formatWeekLabel(task.week)}</span>
-                      {user.role === 'lead' && !task.parentId && task.assigneeId === user.personId && (
-                        <button
-                          onClick={() => openChunkModal(task)}
-                          className="text-gray-400 hover:text-blue-600 ml-1"
-                          title="Break into chunks"
-                        >+</button>
-                      )}
-                      {canManage && (
-                        <button
-                          onClick={() => handleDeleteTask(task)}
-                          className="text-gray-300 hover:text-red-500 ml-1"
-                          title="Delete task"
-                        >✕</button>
-                      )}
-                    </span>
-                  ))}
+                  {groupTasks.map(task => {
+                    const isChunk = !!task.parentId;
+                    const isDelegatedParent = !isChunk && delegatedParentIds.has(task.id);
+                    return (
+                      <span
+                        key={task.id}
+                        draggable={canManage}
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData(TASK_DRAG_TYPE, task.id);
+                          e.dataTransfer.setData('text/plain', task.id);
+                        }}
+                        className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm cursor-grab hover:border-blue-400 ${isChunk ? 'bg-white/60 border border-gray-200 text-gray-600' : 'bg-white border border-gray-300 shadow-sm'}`}
+                        title={canManage ? 'Drag to another person to reassign' : 'Read-only view'}
+                      >
+                        <span className="text-gray-400">⋮⋮</span>
+                        {isChunk && <span className="text-xs text-gray-400">↳</span>}
+                        <span className={isChunk ? 'font-medium text-gray-700' : 'font-semibold text-gray-900'}>{task.title}</span>
+                        {isChunk
+                          ? <span className="text-xs text-gray-400 italic">chunk of {task.parentTitle}</span>
+                          : <span className="text-xs text-gray-500">{task.assigneeName || task.projectName}</span>}
+                        {isDelegatedParent
+                          ? <span className="text-xs font-medium bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full" title="Hours count toward its chunks">delegated</span>
+                          : <span className="text-xs text-blue-600 font-semibold">{task.estimatedHours}h</span>}
+                        <span className="text-xs text-gray-400">{formatWeekLabel(task.week)}</span>
+                        {user.role === 'lead' && !isChunk && task.assigneeId === user.personId && (
+                          <button
+                            onClick={() => openChunkModal(task)}
+                            className="text-gray-400 hover:text-blue-600 ml-1"
+                            title="Break into chunks"
+                          >+</button>
+                        )}
+                        {canManage && (
+                          <button
+                            onClick={() => handleDeleteTask(task)}
+                            className="text-gray-300 hover:text-red-500 ml-1"
+                            title="Delete task"
+                          >✕</button>
+                        )}
+                      </span>
+                    );
+                  })}
                 </div>
               </div>
             );
