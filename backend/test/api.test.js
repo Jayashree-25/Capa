@@ -556,5 +556,113 @@ test('lead delegation: parent tasks can be broken into chunks (one level)', asyn
 
   const report = await (await request('/reports/load?granularity=week&from=2026-08-10&to=2026-08-10&team=Omega')).json();
   const leadRow = report.people.find(p => p.id === lead.id);
-  assert.strictEqual(leadRow.totalAssignedHours, 36);
+  assert.strictEqual(leadRow.totalAssignedHours, 6); // 30h parent suppressed (has chunks); only the 6h self-chunk counts
+});
+
+// ---------- Delegation-aware capacity & reporting ----------
+test('delegated capacity: parent hours suppressed, chunks count once for their assignee', async () => {
+  const lead = await (await json('POST', '/people', { name: 'Calc Lead', team: 'Delta', role: 'lead' })).json();
+  const m1 = await (await json('POST', '/people', { name: 'Calc Member One', team: 'Delta', role: 'member', managerId: lead.id })).json();
+  const m2 = await (await json('POST', '/people', { name: 'Calc Member Two', team: 'Delta', role: 'member', managerId: lead.id })).json();
+
+  const pool = getPool();
+  const hash = await bcrypt.hash('calc-pass-123', 10);
+  await pool.query(
+    'INSERT INTO users (id, email, password_hash, role, person_id) VALUES ($1,$2,$3,$4,$5)',
+    ['u-calc-lead', 'calclead@capa.test', hash, 'lead', lead.id]
+  );
+  const login = await apiFetch('/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'calclead@capa.test', password: 'calc-pass-123' })
+  });
+  const leadToken = (await login.json()).token;
+  const leadReq = (pathname, opts = {}) => fetch(`${base}${pathname}`, {
+    ...opts,
+    headers: { ...(opts.headers || {}), Authorization: `Bearer ${leadToken}` }
+  });
+  const leadJson = (method, pathname, body) => leadReq(pathname, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  const getReport = async (qs) => (await (await request(`/reports/load${qs}`)).json());
+  const row = (report, id) => report.people.find(p => p.id === id);
+  const W1 = '2026-08-10';
+  const W2 = '2026-08-17';
+
+  const normal = await (await leadJson('POST', '/tasks', { title: 'Calc normal', projectId: 'pr-1', assigneeId: m1.id, estimatedHours: 10, week: W1 })).json();
+  const parent = await (await json('POST', '/tasks', { title: 'Calc parent', projectId: 'pr-1', assigneeId: lead.id, estimatedHours: 30, week: W1 })).json();
+
+  // 1 + 2: normal task counts; parent without chunks counts
+  let report = await getReport(`?granularity=week&from=${W1}&to=${W2}&team=Delta`);
+  assert.strictEqual(row(report, m1.id).totalAssignedHours, 10);
+  assert.strictEqual(row(report, lead.id).totalAssignedHours, 30);
+
+  // 3 + 5 + 7: first chunk -> parent suppressed entirely, M1 sums
+  const chunk1 = await (await leadJson('POST', '/tasks', { title: 'Calc chunk one', parentId: parent.id, assigneeId: m1.id, estimatedHours: 8, week: W1 })).json();
+  report = await getReport(`?granularity=week&from=${W1}&to=${W2}&team=Delta`);
+  assert.strictEqual(row(report, lead.id).totalAssignedHours, 0); // parent contributes 0h
+  assert.strictEqual(row(report, m1.id).totalAssignedHours, 18); // 10 + 8
+
+  // 4 + 6: lead-assigned chunk counts for the lead, never double-counted
+  const chunk2 = await (await leadJson('POST', '/tasks', { title: 'Calc chunk two', parentId: parent.id, assigneeId: lead.id, estimatedHours: 6, week: W1 })).json();
+  report = await getReport(`?granularity=week&from=${W1}&to=${W2}&team=Delta`);
+  assert.strictEqual(row(report, lead.id).totalAssignedHours, 6);
+  assert.strictEqual(row(report, m1.id).totalAssignedHours, 18);
+
+  // 14: chunk in a different week lands only in that bucket
+  const chunk3 = await (await leadJson('POST', '/tasks', { title: 'Calc chunk three', parentId: parent.id, assigneeId: m1.id, estimatedHours: 5, week: W2 })).json();
+  report = await getReport(`?granularity=week&from=${W1}&to=${W2}&team=Delta`);
+  const m1W1 = row(report, m1.id).buckets.find(b => b.key === W1);
+  const m1W2 = row(report, m1.id).buckets.find(b => b.key === W2);
+  assert.strictEqual(m1W1.assignedHours, 18);
+  assert.strictEqual(m1W2.assignedHours, 5);
+  assert.strictEqual(row(report, lead.id).buckets.find(b => b.key === W2).assignedHours, 0);
+
+  // 15: project filtering respects chunks (inherited project)
+  const pr1 = await (await request('/reports/load?granularity=week&from=' + W1 + '&to=' + W2 + '&team=Delta&project=pr-1')).json();
+  assert.strictEqual(row(pr1, m1.id).totalAssignedHours, 23);
+  assert.strictEqual(row(pr1, lead.id).totalAssignedHours, 6);
+  const pr2 = await (await request('/reports/load?granularity=week&from=' + W1 + '&to=' + W2 + '&team=Delta&project=pr-2')).json();
+  assert.strictEqual(row(pr2, m1.id).totalAssignedHours, 0);
+  assert.strictEqual(row(pr2, lead.id).totalAssignedHours, 0);
+
+  // 13: overload uses delegated hours (6 + 40 = 46 > 40)
+  await json('POST', '/tasks', { title: 'Calc overload', projectId: 'pr-1', assigneeId: lead.id, estimatedHours: 40, week: W1 });
+  report = await getReport(`?granularity=week&from=${W1}&to=${W2}&team=Delta`);
+  const leadRow = row(report, lead.id);
+  assert.strictEqual(leadRow.totalAssignedHours, 46);
+  assert.strictEqual(leadRow.overloaded, true);
+
+  // 16 + 17: team totals equal per-person bucket sums (dashboard reads the same payload)
+  report = await getReport(`?granularity=week&from=${W1}&to=${W2}&team=Delta`);
+  for (const bucket of report.buckets) {
+    const perPerson = report.people.reduce((s, p) => s + (p.buckets.find(b => b.key === bucket)?.assignedHours || 0), 0);
+    assert.strictEqual(perPerson, report.teamTotals.find(b => b.key === bucket).assignedHours);
+  }
+  const allAssigned = report.people.reduce((s, p) => s + p.totalAssignedHours, 0);
+  const teamTotalsSum = report.teamTotals.reduce((s, b) => s + b.assignedHours, 0);
+  assert.strictEqual(allAssigned, teamTotalsSum);
+
+  // 10: deleting a chunk updates load immediately
+  assert.strictEqual((await request(`/tasks/${chunk3.id}`, { method: 'DELETE' })).status, 200);
+  report = await getReport(`?granularity=week&from=${W1}&to=${W2}&team=Delta`);
+  assert.strictEqual(row(report, m1.id).buckets.find(b => b.key === W2).assignedHours, 0);
+  assert.strictEqual(row(report, m1.id).totalAssignedHours, 18);
+
+  // 11: parent with chunks still cannot be deleted
+  assert.strictEqual((await request(`/tasks/${parent.id}`, { method: 'DELETE' })).status, 409);
+
+  // 12: after all chunks are gone, the parent counts again
+  assert.strictEqual((await request(`/tasks/${chunk1.id}`, { method: 'DELETE' })).status, 200);
+  assert.strictEqual((await request(`/tasks/${chunk2.id}`, { method: 'DELETE' })).status, 200);
+  report = await getReport(`?granularity=week&from=${W1}&to=${W2}&team=Delta`);
+  assert.strictEqual(row(report, lead.id).totalAssignedHours, 70); // 30 parent revived + 40 overload
+
+  // month granularity applies the same rule
+  const month = await getReport(`?granularity=month&from=2026-08&to=2026-08&team=Delta`);
+  assert.strictEqual(row(month, m1.id).totalAssignedHours, 10); // chunks were deleted; only the normal task remains
+  assert.strictEqual(row(month, lead.id).totalAssignedHours, 70);
 });
