@@ -205,7 +205,7 @@ const Dashboard = ({ user }) => {
   const groups = taskGroups();
   const hierarchyRows = isBoss && report ? buildHierarchyRows(report.people) : [];
 
-  const renderPersonRow = (person, { isLead = false, isMember = false, hasMembers = false, collapsed = false } = {}) => (
+  const renderPersonRow = (person, { isLead = false, isMember = false, isLast = false, hasMembers = false, collapsed = false } = {}) => (
     <tr
       key={person.id}
       onDragOver={(e) => { e.preventDefault(); setDropTarget(person.id); }}
@@ -221,26 +221,35 @@ const Dashboard = ({ user }) => {
       <td className={`p-2.5 ${isMember ? 'pl-12' : ''}`}>
         <div className="flex items-center gap-2">
           {isLead && (
-            <span className="w-5 inline-flex justify-center shrink-0">
+            <span className="w-6 inline-flex justify-center shrink-0">
               {hasMembers && (
                 <button
                   onClick={() => toggleLead(person.id)}
-                  className={`text-[13px] leading-none ${collapsed ? 'text-gray-400' : 'text-blue-600'} hover:text-blue-700`}
+                  className={`w-6 h-6 inline-flex items-center justify-center rounded hover:bg-gray-100 ${collapsed ? 'text-gray-500' : 'text-blue-600'}`}
                   title={collapsed ? 'Expand members' : 'Collapse members'}
                 >
-                  {collapsed ? '▸' : '▾'}
+                  <svg
+                    className={`w-4 h-4 transition-transform duration-150 ${collapsed ? '-rotate-90' : ''}`}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
                 </button>
               )}
             </span>
           )}
-          {isMember && <span className="text-gray-300 text-xs shrink-0">└</span>}
-          <span className={isMember ? 'font-medium text-gray-600' : 'font-semibold text-gray-900'}>{person.name}</span>
+          <span className={`${isMember ? 'font-medium text-gray-600' : 'font-semibold text-gray-900'} whitespace-nowrap`}>{person.name}</span>
           {isLead && <span className="text-xs font-medium bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">Lead</span>}
           {person.overloaded && <span className="text-xs font-medium bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Overloaded</span>}
           {canManage && (
             <button
               onClick={() => handleDeletePerson(person)}
-              className="text-gray-300 hover:text-red-500"
+              className="ml-1.5 shrink-0 text-gray-400 hover:text-red-500"
               title="Delete person"
             >✕</button>
           )}
@@ -369,7 +378,7 @@ const Dashboard = ({ user }) => {
                       return (
                         <Fragment key={row.person.id}>
                           {renderPersonRow(row.person, { isLead: true, hasMembers: row.members.length > 0, collapsed })}
-                          {!collapsed && row.members.map(member => renderPersonRow(member, { isMember: true }))}
+                          {!collapsed && row.members.map((member, index) => renderPersonRow(member, { isMember: true, isLast: index === row.members.length - 1 }))}
                         </Fragment>
                       );
                     }
@@ -404,7 +413,7 @@ const Dashboard = ({ user }) => {
 
       <Card>
         <h2 className="text-xl font-semibold mb-4">Tasks</h2>
-        <div className="space-y-4">
+        <div className="space-y-3">
           {[...groups.keys()].map(key => {
             const groupTasks = groups.get(key);
             if (groupTasks.length === 0) return null;
@@ -420,53 +429,58 @@ const Dashboard = ({ user }) => {
                   setDropTarget(null);
                   if (taskId) handleReassign(taskId, key === 'unassigned' ? null : key);
                 }}
-                className={`rounded-lg p-3.5 ${dropTarget === key ? 'bg-blue-100 ring-2 ring-blue-400' : 'bg-gray-50/70'}`}
+                className={`rounded-lg p-3 ${dropTarget === key ? 'bg-blue-100 ring-2 ring-blue-400' : 'bg-gray-50/70'}`}
               >
-                <h3 className="font-semibold text-gray-800 mb-2">
-                  {person ? person.name : 'Unassigned'}
-                  <span className="ml-2 text-xs font-normal text-gray-400">{groupTasks.length} task(s)</span>
-                  {person && <span className="ml-2 text-xs font-normal text-gray-500">{person.team}</span>}
-                </h3>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex items-baseline justify-between mb-2">
+                  <h3 className="font-semibold text-gray-900">{person ? person.name : 'Unassigned'}</h3>
+                  <div className="flex items-center gap-3 text-xs">
+                    {person && <span className="text-gray-500">{person.team}</span>}
+                    <span className="text-gray-400">{groupTasks.length} {groupTasks.length === 1 ? 'task' : 'tasks'}</span>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
                   {groupTasks.map(task => {
                     const isChunk = !!task.parentId;
                     const isDelegatedParent = !isChunk && delegatedParentIds.has(task.id);
                     return (
-                      <span
+                      <div
                         key={task.id}
                         draggable={canManage}
                         onDragStart={(e) => {
                           e.dataTransfer.setData(TASK_DRAG_TYPE, task.id);
                           e.dataTransfer.setData('text/plain', task.id);
                         }}
-                        className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm cursor-grab hover:border-blue-400 ${isChunk ? 'bg-white/60 border border-gray-200 text-gray-600' : 'bg-white border border-gray-300 shadow-sm'}`}
+                        className={`flex items-center gap-2.5 rounded-md px-3 py-2 ${isChunk ? 'bg-white/60 border border-gray-200' : 'bg-white border border-gray-300'} ${canManage ? 'cursor-grab hover:border-blue-400' : ''}`}
                         title={canManage ? 'Drag to another person to reassign' : 'Read-only view'}
                       >
-                        <span className="text-gray-400">⋮⋮</span>
-                        {isChunk && <span className="text-xs text-gray-400">↳</span>}
-                        <span className={isChunk ? 'font-medium text-gray-700' : 'font-semibold text-gray-900'}>{task.title}</span>
-                        {isChunk
-                          ? <span className="text-xs text-gray-400 italic">chunk of {task.parentTitle}</span>
-                          : <span className="text-xs text-gray-500">{task.assigneeName || task.projectName}</span>}
-                        {isDelegatedParent
-                          ? <span className="text-xs font-medium bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full" title="Hours count toward its chunks">delegated</span>
-                          : <span className="text-xs text-blue-600 font-semibold">{task.estimatedHours}h</span>}
-                        <span className="text-xs text-gray-400">{formatWeekLabel(task.week)}</span>
+                        <span className="text-gray-400 shrink-0">⋮⋮</span>
+                        <div className="min-w-0 flex-1">
+                          <div className={`truncate ${isChunk ? 'font-medium text-gray-700' : 'font-semibold text-gray-900'}`}>{task.title}</div>
+                          <div className="flex flex-wrap items-center gap-x-2 text-xs">
+                            {isChunk
+                              ? <span className="text-gray-400 italic">chunk of {task.parentTitle}</span>
+                              : <span className="text-gray-500">{task.assigneeName || task.projectName}</span>}
+                            {isDelegatedParent
+                              ? <span className="font-medium bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-full" title="Hours count toward its chunks">delegated</span>
+                              : <span className="text-blue-600 font-semibold">{task.estimatedHours}h</span>}
+                            <span className="text-gray-400">{formatWeekLabel(task.week)}</span>
+                          </div>
+                        </div>
                         {user.role === 'lead' && !isChunk && task.assigneeId === user.personId && (
                           <button
                             onClick={() => openChunkModal(task)}
-                            className="text-gray-400 hover:text-blue-600 ml-1"
+                            className="text-gray-400 hover:text-blue-600 shrink-0"
                             title="Break into chunks"
                           >+</button>
                         )}
                         {canManage && (
                           <button
                             onClick={() => handleDeleteTask(task)}
-                            className="text-gray-300 hover:text-red-500 ml-1"
+                            className="ml-auto text-gray-300 hover:text-red-500 shrink-0"
                             title="Delete task"
                           >✕</button>
                         )}
-                      </span>
+                      </div>
                     );
                   })}
                 </div>
