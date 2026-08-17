@@ -4,6 +4,8 @@ import { Button } from './Button';
 import { createTask } from '../services/api';
 import { weekToMonday, toISO } from '../utils/dateUtils';
 
+const personLabel = (p) => `${p.name} — ${p.role === 'lead' ? 'Lead' : 'Member'} · ${p.team}`;
+
 const TaskFormModal = ({ isOpen, onClose, onCreated, people = [], projects = [], currentMonday, assigneeLock = null, isBoss = false, assigneeOptions = null }) => {
   const [title, setTitle] = useState('');
   const [projectId, setProjectId] = useState('');
@@ -14,10 +16,22 @@ const TaskFormModal = ({ isOpen, onClose, onCreated, people = [], projects = [],
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (isOpen && currentMonday) {
-      setWeek(currentMonday);
+    if (isOpen) {
+      setTitle('');
+      setProjectId('');
+      setAssigneeId('');
+      setEstimatedHours(8);
+      setError('');
+      if (currentMonday) {
+        setWeek(currentMonday);
+      }
     }
   }, [isOpen, currentMonday]);
+
+  const assignee = people.find(p => p.id === (assigneeLock || assigneeId));
+  const assigneeIsLead = isBoss && !!assignee && assignee.role === 'lead';
+  const projectName = projects.find(p => p.id === projectId)?.name || '';
+  const autoTitle = assigneeIsLead ? `${projectName} — ${assignee.name}` : '';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -26,11 +40,15 @@ const TaskFormModal = ({ isOpen, onClose, onCreated, people = [], projects = [],
       setError('Please pick a valid week date.');
       return;
     }
+    if (assigneeIsLead && !projectId) {
+      setError('Please pick a project.');
+      return;
+    }
     setSubmitting(true);
     setError('');
     try {
       const response = await createTask({
-        title,
+        title: assigneeIsLead ? autoTitle : title,
         projectId,
         assigneeId: assigneeLock || assigneeId || null,
         estimatedHours: Number(estimatedHours),
@@ -57,68 +75,69 @@ const TaskFormModal = ({ isOpen, onClose, onCreated, people = [], projects = [],
         {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-md">{error}</div>}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Task title</label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full h-11 px-3.5 rounded-md border border-gray-300 bg-white text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none transition"
-              required
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Project</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Assign to</label>
+            {assigneeLock ? (
+              <input
+                type="text"
+                value={people.find(p => p.id === assigneeLock)?.name || ''}
+                disabled
+                className="w-full h-11 px-3.5 rounded-md border border-gray-300 bg-gray-100 text-sm text-gray-600"
+              />
+            ) : (
               <select
-                value={projectId}
-                onChange={(e) => setProjectId(e.target.value)}
+                value={assigneeId}
+                onChange={(e) => setAssigneeId(e.target.value)}
                 className="w-full h-11 px-3.5 rounded-md border border-gray-300 bg-white text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none transition"
                 required
               >
-                <option value="">Select project…</option>
-                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                <option value="">Select assignee…</option>
+                {assigneeOptions ? (
+                  <optgroup label="My team">
+                    {assigneeOptions.map(p => <option key={p.id} value={p.id}>{personLabel(p)}</option>)}
+                  </optgroup>
+                ) : isBoss ? (
+                  <>
+                    {leads.length > 0 && (
+                      <optgroup label="Leads">
+                        {leads.map(p => <option key={p.id} value={p.id}>{personLabel(p)}</option>)}
+                      </optgroup>
+                    )}
+                    {solo.length > 0 && (
+                      <optgroup label="Solo">
+                        {solo.map(p => <option key={p.id} value={p.id}>{personLabel(p)}</option>)}
+                      </optgroup>
+                    )}
+                  </>
+                ) : (
+                  people.map(p => <option key={p.id} value={p.id}>{personLabel(p)}</option>)
+                )}
               </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Assignee</label>
-              {assigneeLock ? (
-                <input
-                  type="text"
-                  value={people.find(p => p.id === assigneeLock)?.name || ''}
-                  disabled
-                  className="w-full h-11 px-3.5 rounded-md border border-gray-300 bg-gray-100 text-sm text-gray-600"
-                />
-              ) : (
-                <select
-                  value={assigneeId}
-                  onChange={(e) => setAssigneeId(e.target.value)}
-                  className="w-full h-11 px-3.5 rounded-md border border-gray-300 bg-white text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none transition"
-                >
-                  <option value="">Unassigned</option>
-                  {assigneeOptions ? (
-                    <optgroup label="My team">
-                      {assigneeOptions.map(p => <option key={p.id} value={p.id}>{p.name} — {p.team}</option>)}
-                    </optgroup>
-                  ) : isBoss ? (
-                    <>
-                      {leads.length > 0 && (
-                        <optgroup label="Leads">
-                          {leads.map(p => <option key={p.id} value={p.id}>{p.name} — {p.team}</option>)}
-                        </optgroup>
-                      )}
-                      {solo.length > 0 && (
-                        <optgroup label="Solo">
-                          {solo.map(p => <option key={p.id} value={p.id}>{p.name} — {p.team}</option>)}
-                        </optgroup>
-                      )}
-                    </>
-                  ) : (
-                    people.map(p => <option key={p.id} value={p.id}>{p.name} — {p.team}</option>)
-                  )}
-                </select>
-              )}
-            </div>
+            )}
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Project</label>
+            <select
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
+              className="w-full h-11 px-3.5 rounded-md border border-gray-300 bg-white text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none transition"
+              required
+            >
+              <option value="">Select project…</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          {!assigneeIsLead && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Task title</label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="w-full h-11 px-3.5 rounded-md border border-gray-300 bg-white text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none transition"
+                required
+              />
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Estimated hours</label>
