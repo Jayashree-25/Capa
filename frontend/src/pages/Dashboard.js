@@ -6,6 +6,7 @@ import PersonFormModal from '../components/PersonFormModal';
 import ProjectFormModal from '../components/ProjectFormModal';
 import TaskFormModal from '../components/TaskFormModal';
 import ChunkFormModal from '../components/ChunkFormModal';
+import AssignProjectModal from '../components/AssignProjectModal';
 import {
   getPeople, getProjects, getTasks, getTeamNames, getLoadReport,
   updateTask, deleteTask, deletePerson
@@ -53,6 +54,7 @@ const Dashboard = ({ user }) => {
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [personModalOpen, setPersonModalOpen] = useState(false);
   const [projectModalOpen, setProjectModalOpen] = useState(false);
+  const [assignProjectOpen, setAssignProjectOpen] = useState(false);
   const [chunkModalOpen, setChunkModalOpen] = useState(false);
   const [chunkParent, setChunkParent] = useState(null);
   const [dropTarget, setDropTarget] = useState(null);
@@ -154,6 +156,16 @@ const Dashboard = ({ user }) => {
     ? people.filter(p => p.id === user.personId || p.managerId === user.personId)
     : [];
 
+  const assigneeOptions = user.role === 'lead'
+    ? people.filter(p => p.id === user.personId || p.managerId === user.personId)
+    : null;
+
+  const leads = people.filter(p => p.role === 'lead');
+
+  const handleAssignedProject = (project) => {
+    setProjects(prev => prev.map(p => p.id === project.id ? project : p));
+  };
+
   const navigate = (dir) => {
     setPeriodStart(prev => granularity === 'week' ? addWeeks(prev, dir * WEEK_COUNT) : addMonths(prev, dir * MONTH_COUNT));
   };
@@ -206,18 +218,23 @@ const Dashboard = ({ user }) => {
       }}
       className={`border-b border-gray-100 ${person.overloaded ? 'bg-red-50' : ''} ${dropTarget === person.id ? 'bg-blue-100 ring-2 ring-blue-400' : ''}`}
     >
-      <td className={`p-2.5 ${isMember ? 'pl-10' : ''}`}>
+      <td className={`p-2.5 ${isMember ? 'pl-12' : ''}`}>
         <div className="flex items-center gap-2">
-          {isLead && hasMembers && (
-            <button
-              onClick={() => toggleLead(person.id)}
-              className="w-4 text-gray-400 hover:text-gray-600 text-xs leading-none text-center"
-              title={collapsed ? 'Expand members' : 'Collapse members'}
-            >
-              {collapsed ? '▸' : '▾'}
-            </button>
+          {isLead && (
+            <span className="w-5 inline-flex justify-center shrink-0">
+              {hasMembers && (
+                <button
+                  onClick={() => toggleLead(person.id)}
+                  className={`text-[13px] leading-none ${collapsed ? 'text-gray-400' : 'text-blue-600'} hover:text-blue-700`}
+                  title={collapsed ? 'Expand members' : 'Collapse members'}
+                >
+                  {collapsed ? '▸' : '▾'}
+                </button>
+              )}
+            </span>
           )}
-          <span className={isMember ? 'font-medium text-gray-700' : 'font-semibold text-gray-900'}>{person.name}</span>
+          {isMember && <span className="text-gray-300 text-xs shrink-0">└</span>}
+          <span className={isMember ? 'font-medium text-gray-600' : 'font-semibold text-gray-900'}>{person.name}</span>
           {isLead && <span className="text-xs font-medium bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">Lead</span>}
           {person.overloaded && <span className="text-xs font-medium bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Overloaded</span>}
           {canManage && (
@@ -266,6 +283,7 @@ const Dashboard = ({ user }) => {
         </div>
         <div className="flex items-center gap-3">
           <Button onClick={() => setTaskModalOpen(true)}>+ Add Task</Button>
+          {canManage && <Button variant="secondary" onClick={() => setAssignProjectOpen(true)}>+ Assign Project</Button>}
           {canManage && <Button variant="secondary" onClick={() => setPersonModalOpen(true)}>+ Add Person</Button>}
           {canManage && <Button variant="secondary" onClick={() => setProjectModalOpen(true)}>+ Add Project</Button>}
         </div>
@@ -467,6 +485,14 @@ const Dashboard = ({ user }) => {
         currentMonday={toISO(todayMonday())}
         assigneeLock={canManage ? null : user.personId}
         isBoss={isBoss}
+        assigneeOptions={assigneeOptions}
+      />
+      <AssignProjectModal
+        isOpen={assignProjectOpen}
+        onClose={() => setAssignProjectOpen(false)}
+        onAssigned={handleAssignedProject}
+        projects={projects}
+        leads={leads}
       />
       <ChunkFormModal
         isOpen={chunkModalOpen}
