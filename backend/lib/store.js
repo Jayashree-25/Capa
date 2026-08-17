@@ -8,7 +8,12 @@ const loadData = async () => {
       FROM people
       ORDER BY name
     `),
-    pool.query('SELECT id, name FROM projects ORDER BY name'),
+    pool.query(`
+      SELECT pr.id, pr.name, pr.owner_id AS "ownerId", p.name AS "ownerName"
+      FROM projects pr
+      LEFT JOIN people p ON p.id = pr.owner_id
+      ORDER BY pr.name
+    `),
     pool.query(`
       SELECT id, title, project_id AS "projectId", assignee_id AS "assigneeId",
              estimated_hours AS "estimatedHours", to_char(week, 'YYYY-MM-DD') AS week,
@@ -62,10 +67,10 @@ const saveData = async (data) => {
 
     for (const pr of data.projects || []) {
       await client.query(`
-        INSERT INTO projects (id, name)
-        VALUES ($1, $2)
-        ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name
-      `, [pr.id, pr.name]);
+        INSERT INTO projects (id, name, owner_id)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, owner_id = EXCLUDED.owner_id
+      `, [pr.id, pr.name, pr.ownerId ?? null]);
     }
 
     for (const t of data.tasks || []) {
