@@ -4,6 +4,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 const NAV_ITEMS = [
   { label: 'Dashboard', path: '/dashboard', roles: ['boss', 'lead', 'engineer'] },
   { label: 'People', path: '/people', roles: ['boss', 'lead'] },
+  { label: 'Users', path: '/users', roles: ['boss'] },
   { label: 'Tasks', path: '/tasks', roles: ['boss', 'lead'] },
   { label: 'Projects', path: '/projects', roles: ['boss', 'lead'] },
   { label: 'Organization', path: '/organization', roles: ['boss', 'lead'] }
