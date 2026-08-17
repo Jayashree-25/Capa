@@ -150,6 +150,12 @@ test('role restrictions: engineers cannot list users, bosses can', async () => {
   const forbidden = await apiFetch('/auth/users', { headers: { Authorization: `Bearer ${engineerToken}` } });
   assert.strictEqual(forbidden.status, 403);
 
+  const meRes = await apiFetch('/auth/me', { headers: { Authorization: `Bearer ${engineerToken}` } });
+  assert.strictEqual(meRes.status, 200);
+  const me = await meRes.json();
+  assert.strictEqual(me.personRole, 'member');
+  assert.strictEqual(me.personTeam, 'Beta');
+
   const allowed = await request('/auth/users');
   assert.strictEqual(allowed.status, 200);
   const users = await allowed.json();
@@ -235,6 +241,52 @@ test('GET /api/projects and POST create; DELETE rules', async () => {
 
   const inUse = await request('/projects/pr-1', { method: 'DELETE' });
   assert.strictEqual(inUse.status, 409);
+});
+
+test('PUT /api/projects/:id assigns a project to a lead (Project -> Lead)', async () => {
+  const lead = await (await json('POST', '/people', { name: 'Assign Lead', team: 'AssignCo', role: 'lead' })).json();
+  const member = await (await json('POST', '/people', { name: 'Assign Member', team: 'AssignCo', role: 'member', managerId: lead.id })).json();
+  const project = await (await json('POST', '/projects', { name: 'Assignable Site' })).json();
+
+  const tasksBefore = await (await request('/tasks')).json();
+
+  // assign to a lead -> 200, ownerId + ownerName set
+  const assigned = await json('PUT', `/projects/${project.id}`, { ownerId: lead.id });
+  assert.strictEqual(assigned.status, 200);
+  const assignedBody = await assigned.json();
+  assert.strictEqual(assignedBody.ownerId, lead.id);
+  assert.strictEqual(assignedBody.ownerName, 'Assign Lead');
+
+  // GET /projects reflects the owner
+  const list = await (await request('/projects')).json();
+  const listed = list.find(p => p.id === project.id);
+  assert.strictEqual(listed.ownerId, lead.id);
+  assert.strictEqual(listed.ownerName, 'Assign Lead');
+
+  // assignment never creates tasks or hours
+  const tasksAfter = await (await request('/tasks')).json();
+  assert.strictEqual(tasksAfter.length, tasksBefore.length);
+
+  // assign to a member -> 400
+  assert.strictEqual((await json('PUT', `/projects/${project.id}`, { ownerId: member.id })).status, 400);
+  // unknown owner -> 400
+  assert.strictEqual((await json('PUT', `/projects/${project.id}`, { ownerId: 'missing' })).status, 400);
+  // unknown project -> 404
+  assert.strictEqual((await json('PUT', '/projects/missing', { ownerId: lead.id })).status, 404);
+
+  // unassign -> 200, owner cleared
+  const unassigned = await json('PUT', `/projects/${project.id}`, { ownerId: null });
+  assert.strictEqual(unassigned.status, 200);
+  const unassignedBody = await unassigned.json();
+  assert.strictEqual(unassignedBody.ownerId, null);
+
+  const tasksUnassigned = await (await request('/tasks')).json();
+  assert.strictEqual(tasksUnassigned.length, tasksBefore.length);
+
+  // cleanup
+  await request(`/projects/${project.id}`, { method: 'DELETE' });
+  await request(`/people/${member.id}`, { method: 'DELETE' });
+  await request(`/people/${lead.id}`, { method: 'DELETE' });
 });
 
 // ---------- Tasks ----------
