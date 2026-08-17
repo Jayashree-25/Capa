@@ -280,6 +280,31 @@ router.post('/projects', requireRole('boss', 'lead'), async (req, res) => {
   }
 });
 
+router.put('/projects/:id', requireRole('boss', 'lead'), async (req, res) => {
+  try {
+    const { ownerId } = req.body || {};
+    const data = await loadData();
+    const index = data.projects.findIndex(p => p.id === req.params.id);
+    if (index === -1) return res.status(404).json({ error: 'Project not found.' });
+
+    if (ownerId !== null && ownerId !== undefined) {
+      const owner = data.people.find(p => p.id === ownerId);
+      if (!owner) return res.status(400).json({ error: 'Lead does not exist.' });
+      if (owner.role !== 'lead') {
+        return res.status(400).json({ error: 'A project can only be assigned to a lead.' });
+      }
+    }
+
+    data.projects[index] = { ...data.projects[index], ownerId: ownerId ?? null };
+    await saveData(data);
+    const peopleById = Object.fromEntries(data.people.map(p => [p.id, p]));
+    const updated = data.projects[index];
+    res.json({ ...updated, ownerName: updated.ownerId ? (peopleById[updated.ownerId]?.name || null) : null });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to assign project: ${err.message}` });
+  }
+});
+
 router.delete('/projects/:id', requireRole('boss', 'lead'), async (req, res) => {
   try {
     const data = await loadData();
