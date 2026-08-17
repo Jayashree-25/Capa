@@ -24,6 +24,8 @@ api.interceptors.response.use(
 
 // Auth
 export const login = (data) => api.post('/auth/login', data);
+export const registerUser = (data) => api.post('/auth/register', data);
+export const getUsers = () => api.get('/auth/users');
 
 // People
 export const getPeople = () => api.get('/people');
@@ -37,6 +39,7 @@ export const getTeamNames = () => api.get('/teams');
 // Projects
 export const getProjects = () => api.get('/projects');
 export const createProject = (data) => api.post('/projects', data);
+export const updateProject = (id, data) => api.put(`/projects/${id}`, data);
 export const deleteProject = (id) => api.delete(`/projects/${id}`);
 
 // Tasks
