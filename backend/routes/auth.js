@@ -21,11 +21,14 @@ const toPublicUser = (row) => ({
   role: row.role,
   personId: row.person_id,
   personName: row.person_name,
+  personRole: row.person_role || null,
+  personTeam: row.person_team || null,
   createdAt: row.created_at
 });
 
 const USER_SELECT = `
-  SELECT u.id, u.email, u.role, u.person_id, u.created_at, p.name AS person_name
+  SELECT u.id, u.email, u.role, u.person_id, u.created_at, p.name AS person_name,
+         p.role AS person_role, p.team AS person_team
   FROM users u
   LEFT JOIN people p ON p.id = u.person_id
 `;
@@ -95,7 +98,7 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required.' });
     }
     const { rows } = await getPool().query(`
-      SELECT u.*, p.name AS person_name
+      SELECT u.*, p.name AS person_name, p.role AS person_role, p.team AS person_team
       FROM users u
       LEFT JOIN people p ON p.id = u.person_id
       WHERE lower(u.email) = lower($1)
