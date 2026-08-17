@@ -17,6 +17,7 @@ const PersonFormModal = ({ isOpen, onClose, onCreated, teams = [], people = [] }
   const [submitting, setSubmitting] = useState(false);
 
   const leads = people.filter(p => p.role === 'lead');
+  const selectedLead = role === 'member' ? leads.find(p => p.id === managerId) : null;
 
   const resetForm = () => {
     setName('');
@@ -30,8 +31,8 @@ const PersonFormModal = ({ isOpen, onClose, onCreated, teams = [], people = [] }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const finalTeam = team === '__new__' ? customTeam : team;
-    if (!finalTeam.trim()) {
+    const resolvedTeam = selectedLead ? selectedLead.team : (team === '__new__' ? customTeam : team);
+    if (!resolvedTeam.trim()) {
       setError('Team is required.');
       return;
     }
@@ -40,7 +41,7 @@ const PersonFormModal = ({ isOpen, onClose, onCreated, teams = [], people = [] }
     try {
       const response = await createPerson({
         name,
-        team: finalTeam,
+        team: resolvedTeam,
         weeklyCapacity: Number(weeklyCapacity),
         role,
         managerId: role === 'lead' ? null : (managerId || null)
@@ -73,23 +74,37 @@ const PersonFormModal = ({ isOpen, onClose, onCreated, teams = [], people = [] }
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Team</label>
-            <select
-              value={team}
-              onChange={(e) => setTeam(e.target.value)}
-              className={inputClass}
-            >
-              <option value="">Select a team…</option>
-              {teams.map(t => <option key={t} value={t}>{t}</option>)}
-              <option value="__new__">New team…</option>
-            </select>
-            {team === '__new__' && (
-              <input
-                type="text"
-                value={customTeam}
-                onChange={(e) => setCustomTeam(e.target.value)}
-                placeholder="Team name"
-                className={`${inputClass} mt-2`}
-              />
+            {selectedLead ? (
+              <>
+                <input
+                  type="text"
+                  value={selectedLead.team}
+                  disabled
+                  className="w-full h-11 px-3.5 rounded-md border border-gray-300 bg-gray-100 text-sm text-gray-600"
+                />
+                <p className="text-xs text-gray-500 mt-1.5">Team is inherited from {selectedLead.name}.</p>
+              </>
+            ) : (
+              <>
+                <select
+                  value={team}
+                  onChange={(e) => setTeam(e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="">Select a team…</option>
+                  {teams.map(t => <option key={t} value={t}>{t}</option>)}
+                  <option value="__new__">New team…</option>
+                </select>
+                {team === '__new__' && (
+                  <input
+                    type="text"
+                    value={customTeam}
+                    onChange={(e) => setCustomTeam(e.target.value)}
+                    placeholder="Team name"
+                    className={`${inputClass} mt-2`}
+                  />
+                )}
+              </>
             )}
           </div>
           <div>
@@ -119,11 +134,15 @@ const PersonFormModal = ({ isOpen, onClose, onCreated, teams = [], people = [] }
             ) : (
               <select
                 value={managerId}
-                onChange={(e) => setManagerId(e.target.value)}
+                onChange={(e) => {
+                  setManagerId(e.target.value);
+                  const lead = leads.find(p => p.id === e.target.value);
+                  if (lead) setTeam(lead.team);
+                }}
                 className={inputClass}
               >
                 <option value="">No manager — Solo</option>
-                {leads.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {leads.map(p => <option key={p.id} value={p.id}>{p.name} — {p.team}</option>)}
               </select>
             )}
           </div>
