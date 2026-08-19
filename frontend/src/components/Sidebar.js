@@ -10,31 +10,40 @@ const NAV_ITEMS = [
   { label: 'Organization', path: '/organization', roles: ['boss', 'lead'] }
 ];
 
-const Sidebar = ({ user, onNavigate }) => {
+const Sidebar = ({ user, onLogout, onNavigate }) => {
   const { pathname } = useLocation();
   const items = NAV_ITEMS.filter(item => item.roles.includes(user.role));
 
   return (
-    <nav className="flex flex-col gap-1 p-3">
-      {items.map(item => {
-        const isActive = pathname === item.path;
-        return (
-          <NavLink
-            key={item.path}
-            to={item.path}
-            exact
-            onClick={onNavigate}
-            className={`flex items-center gap-2.5 px-3 py-2.5 rounded-md text-sm font-medium transition ${
-              isActive
-                ? 'bg-blue-50 text-blue-700'
-                : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-            }`}
-          >
-            <span className={`w-1 h-4 rounded-full ${isActive ? 'bg-blue-600' : 'bg-transparent'}`} />
-            {item.label}
-          </NavLink>
-        );
-      })}
+    <nav className="flex flex-col h-full p-3">
+      <div className="flex flex-col gap-1">
+        {items.map(item => {
+          const isActive = pathname === item.path;
+          return (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              exact
+              onClick={onNavigate}
+              className={`flex items-center gap-2.5 px-3 py-2.5 rounded-md text-sm font-medium transition ${
+                isActive
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+              }`}
+            >
+              <span className={`w-1 h-4 rounded-full ${isActive ? 'bg-blue-600' : 'bg-transparent'}`} />
+              {item.label}
+            </NavLink>
+          );
+        })}
+      </div>
+      <button
+        onClick={onLogout}
+        className="mt-auto flex items-center gap-2.5 px-3 py-2.5 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition"
+      >
+        <span className="w-1 h-4 rounded-full bg-transparent" />
+        Logout
+      </button>
     </nav>
   );
 };
