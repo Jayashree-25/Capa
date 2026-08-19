@@ -1,5 +1,4 @@
 import React from 'react';
-import { Button } from './Button';
 
 const ROLE_BADGE = {
   boss: 'bg-gray-900 text-white',
@@ -8,7 +7,7 @@ const ROLE_BADGE = {
   engineer: 'bg-green-100 text-green-800'
 };
 
-const Header = ({ user, onLogout, onMenuClick }) => {
+const Header = ({ user, onMenuClick }) => {
   const displayRole = user.personRole || user.role;
   return (
     <header className="sticky top-0 z-30 bg-white border-b border-gray-200">
@@ -32,9 +31,6 @@ const Header = ({ user, onLogout, onMenuClick }) => {
               {displayRole}
             </span>
           </div>
-          <Button onClick={onLogout} className="bg-gray-600 hover:bg-gray-700">
-            Logout
-          </Button>
         </div>
       </div>
     </header>
