@@ -6,7 +6,7 @@ import { weekToMonday, toISO } from '../utils/dateUtils';
 
 const personLabel = (p) => `${p.name} — ${p.role === 'lead' ? 'Lead' : 'Member'} · ${p.team}`;
 
-const TaskFormModal = ({ isOpen, onClose, onCreated, people = [], projects = [], currentMonday, assigneeLock = null, isBoss = false, assigneeOptions = null }) => {
+const TaskFormModal = ({ isOpen, onClose, onCreated, people = [], projects = [], currentMonday, assigneeLock = null, isBoss = false, assigneeOptions = null, assigneeOptionsLabel = 'My team' }) => {
   const [title, setTitle] = useState('');
   const [projectId, setProjectId] = useState('');
   const [assigneeId, setAssigneeId] = useState('');
@@ -92,7 +92,7 @@ const TaskFormModal = ({ isOpen, onClose, onCreated, people = [], projects = [],
               >
                 <option value="">Select assignee…</option>
                 {assigneeOptions ? (
-                  <optgroup label="My team">
+                  <optgroup label={assigneeOptionsLabel}>
                     {assigneeOptions.map(p => <option key={p.id} value={p.id}>{personLabel(p)}</option>)}
                   </optgroup>
                 ) : isBoss ? (
