@@ -8,7 +8,7 @@ import Profile from './pages/Profile';
 import Shell from './components/Shell';
 import Placeholder from './pages/Placeholder';
 import NotFound from './pages/NotFound';
-import { getUser, clearAuth } from './services/auth';
+import { getUser, setUser as persistUser, clearAuth } from './services/auth';
 
 const PLACEHOLDER_PAGES = [
   { path: '/tasks', title: 'Tasks' },
@@ -24,6 +24,11 @@ function App() {
 
   const handleLogin = (loggedInUser) => setUser(loggedInUser);
 
+  const handleUserUpdated = (updatedUser) => {
+    setUser(updatedUser);
+    persistUser(updatedUser);
+  };
+
   const handleLogout = () => {
     clearAuth();
     setUser(null);
@@ -38,7 +43,7 @@ function App() {
             <Shell user={user} onLogout={handleLogout}>
               <Switch>
                 <Route exact path="/dashboard" render={() => <Dashboard user={user} />} />
-                <Route exact path="/profile" render={() => <Profile user={user} />} />
+                <Route exact path="/profile" render={() => <Profile user={user} onUserUpdated={handleUserUpdated} />} />
                 <RoleRoute user={user} roles={['boss', 'lead']} exact path="/people" render={() => <People />} />
                 <RoleRoute user={user} roles={['boss']} exact path="/users" render={() => <Users />} />
                 {PLACEHOLDER_PAGES.map(page => (
