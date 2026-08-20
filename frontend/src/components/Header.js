@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 
 const ROLE_BADGE = {
   boss: 'bg-gray-900 text-white',
@@ -25,12 +26,16 @@ const Header = ({ user, onMenuClick }) => {
           <span className="text-lg font-bold tracking-wide text-gray-900">CAPA</span>
         </div>
         <div className="flex items-center gap-3">
-          <div className="text-right leading-tight">
+          <Link
+            to="/profile"
+            className="text-right leading-tight rounded-md px-2 py-1 -mr-2 hover:bg-gray-50"
+            title="View profile"
+          >
             <div className="text-sm font-medium text-gray-800">{user.personName || user.email}</div>
             <span className={`inline-block mt-0.5 px-2 py-0.5 rounded-full text-[11px] font-semibold capitalize ${ROLE_BADGE[displayRole] || 'bg-gray-100 text-gray-600'}`}>
               {displayRole}
             </span>
-          </div>
+          </Link>
         </div>
       </div>
     </header>
