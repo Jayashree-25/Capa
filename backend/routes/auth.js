@@ -174,6 +174,35 @@ router.patch('/profile', requireAuth, async (req, res) => {
   }
 });
 
+// PATCH /api/auth/password — change the authenticated user's own password
+router.patch('/password', requireAuth, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body || {};
+    if (!currentPassword || typeof currentPassword !== 'string' || !newPassword || typeof newPassword !== 'string') {
+      return res.status(400).json({ error: 'Current and new password are required.' });
+    }
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: 'New password must be at least 8 characters.' });
+    }
+
+    const pool = getPool();
+    const { rows } = await pool.query('SELECT id, password_hash FROM users WHERE id = $1', [req.user.sub]);
+    const user = rows[0];
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+
+    const valid = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!valid) {
+      return res.status(400).json({ error: 'Current password is incorrect.' });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, user.id]);
+    res.json({ message: 'Password changed successfully.' });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to change password: ${err.message}` });
+  }
+});
+
 // GET /api/auth/users — list users (boss only)
 router.get('/users', requireAuth, requireRole('boss'), async (req, res) => {
   try {
