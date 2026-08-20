@@ -783,3 +783,49 @@ test('profile update: boss edits own name and email, role cannot be changed', as
   assert.strictEqual(engineer.displayName, null);
   assert.strictEqual(engineer.email, 'engineer@capa.test');
 });
+
+test('password change: verifies current password, hashes new one, never leaks the hash', async () => {
+  const patchPass = (body) => request('/auth/password', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const loginAs = (email, password) => apiFetch('/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password })
+  });
+
+  // wrong current password -> rejected, login still works with the old password
+  assert.strictEqual((await patchPass({ currentPassword: 'wrong-password', newPassword: 'new-secret-123' })).status, 400);
+  const stillOld = await loginAs('boss2@capa.test', BOSS_PASSWORD);
+  assert.strictEqual(stillOld.status, 200);
+
+  // validation
+  assert.strictEqual((await patchPass({ currentPassword: BOSS_PASSWORD, newPassword: 'short' })).status, 400);
+  assert.strictEqual((await patchPass({})).status, 400);
+
+  // successful change; new password works, old one no longer does
+  const ok = await patchPass({ currentPassword: BOSS_PASSWORD, newPassword: 'new-secret-123' });
+  assert.strictEqual(ok.status, 200);
+  const body = await ok.json();
+  assert.strictEqual(body.message, 'Password changed successfully.');
+  assert.ok(!('password_hash' in body));
+
+  const newLogin = await loginAs('boss2@capa.test', 'new-secret-123');
+  assert.strictEqual(newLogin.status, 200);
+  const newBody = await newLogin.json();
+  assert.ok(!('password_hash' in newBody.user));
+
+  const oldLogin = await loginAs('boss2@capa.test', BOSS_PASSWORD);
+  assert.strictEqual(oldLogin.status, 401);
+
+  // stored hash is a bcrypt hash, not plaintext
+  const { rows } = await getPool().query('SELECT password_hash FROM users WHERE id = $1', ['u-boss']);
+  assert.ok(rows[0].password_hash.startsWith('$2'));
+  assert.notStrictEqual(rows[0].password_hash, 'new-secret-123');
+
+  // other users unaffected
+  const engLogin = await loginAs('engineer@capa.test', 'engineer-pass-123');
+  assert.strictEqual(engLogin.status, 200);
+});
