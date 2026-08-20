@@ -82,7 +82,7 @@ const Users = () => {
 
       <Card>
         <h2 className="text-lg font-semibold text-gray-800 mb-4">New account</h2>
-        <form onSubmit={handleSubmit} className="grid sm:grid-cols-2 gap-4">
+        <form onSubmit={handleSubmit} className="grid sm:grid-cols-2 gap-x-4 gap-y-5">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
             <input
@@ -131,15 +131,22 @@ const Users = () => {
               className={inputClass}
               required={role === 'lead'}
             >
-              <option value="">{role === 'lead' ? 'Select the lead…' : 'No person — account only'}</option>
+              {role === 'lead' ? (
+                <option value="">Select a lead…</option>
+              ) : (
+                <>
+                  <option value="">Select an engineer…</option>
+                  <option value="">No person — account only</option>
+                </>
+              )}
               {personOptions.map(p => (
                 <option key={p.id} value={p.id}>{p.name} — {p.team}</option>
               ))}
             </select>
             <p className="text-xs text-gray-500 mt-1.5">
               {role === 'lead'
-                ? 'The account signs in with the selected lead\u2019s identity.'
-                : 'Engineer accounts can sign in and view only their own assigned tasks.'}
+                ? 'Links this login to a team lead.'
+                : 'Links this login to a team member.'}
             </p>
           </div>
           <div className="sm:col-span-2 flex justify-end">
