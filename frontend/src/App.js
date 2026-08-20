@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
 import People from './pages/People';
 import Users from './pages/Users';
+import Profile from './pages/Profile';
 import Shell from './components/Shell';
 import Placeholder from './pages/Placeholder';
 import NotFound from './pages/NotFound';
@@ -37,6 +38,7 @@ function App() {
             <Shell user={user} onLogout={handleLogout}>
               <Switch>
                 <Route exact path="/dashboard" render={() => <Dashboard user={user} />} />
+                <Route exact path="/profile" render={() => <Profile user={user} />} />
                 <RoleRoute user={user} roles={['boss', 'lead']} exact path="/people" render={() => <People />} />
                 <RoleRoute user={user} roles={['boss']} exact path="/users" render={() => <Users />} />
                 {PLACEHOLDER_PAGES.map(page => (
