@@ -86,110 +86,113 @@ const Profile = ({ user, onUserUpdated }) => {
   };
 
   return (
-    <div className="max-w-xl">
+    <div className="max-w-5xl">
       <h1 className="text-2xl font-semibold text-gray-800">Profile</h1>
-      <p className="text-sm text-gray-500 mt-0.5 mb-4">Your account details.</p>
-      <Card>
-        {success && (
-          <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-md">{success}</div>
-        )}
-        {error && (
-          <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-md">{error}</div>
-        )}
-        <form onSubmit={handleSave} className="space-y-5">
-          <div>
-            <label htmlFor="profile-name" className="block text-sm font-medium text-gray-700 mb-1.5">Name</label>
-            <input
-              id="profile-name"
-              type="text"
-              value={name}
-              onChange={(e) => { setName(e.target.value); setDirty(true); }}
-              className={inputClass}
-              required
-            />
-          </div>
-          <div>
-            <label htmlFor="profile-email" className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
-            <input
-              id="profile-email"
-              type="email"
-              value={email}
-              onChange={(e) => { setEmail(e.target.value); setDirty(true); }}
-              className={inputClass}
-              required
-            />
-          </div>
-          <div>
-            <span className="block text-sm font-medium text-gray-700 mb-1.5">Role</span>
-            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${ROLE_BADGE[displayRole] || 'bg-gray-100 text-gray-600'}`}>
-              {displayRole}
-            </span>
-            <p className="text-xs text-gray-400 mt-1.5">Role cannot be changed.</p>
-          </div>
-          <div className="flex justify-end space-x-2 pt-2">
-            <Button type="button" variant="secondary" onClick={handleCancel} disabled={saving}>Cancel</Button>
-            <Button type="submit" disabled={saving || !dirty}>
-              {saving ? 'Saving…' : 'Save changes'}
-            </Button>
-          </div>
-        </form>
-      </Card>
+      <p className="text-sm text-gray-500 mt-0.5 mb-5">Your account details and security settings.</p>
 
-      <Card>
-        <div className="flex flex-col">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+        <Card>
+          <h2 className="text-lg font-semibold text-gray-800">Personal Information</h2>
+          <p className="text-sm text-gray-500 mt-0.5 mb-5">Your account details.</p>
+          {success && (
+            <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-md">{success}</div>
+          )}
+          {error && (
+            <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-md">{error}</div>
+          )}
+          <form onSubmit={handleSave} className="space-y-5">
+            <div>
+              <label htmlFor="profile-name" className="block text-sm font-medium text-gray-700 mb-1.5">Name</label>
+              <input
+                id="profile-name"
+                type="text"
+                value={name}
+                onChange={(e) => { setName(e.target.value); setDirty(true); }}
+                className={inputClass}
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor="profile-email" className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
+              <input
+                id="profile-email"
+                type="email"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); setDirty(true); }}
+                className={inputClass}
+                required
+              />
+            </div>
+            <div>
+              <span className="block text-sm font-medium text-gray-700 mb-1.5">Role</span>
+              <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${ROLE_BADGE[displayRole] || 'bg-gray-100 text-gray-600'}`}>
+                {displayRole}
+              </span>
+              <p className="text-xs text-gray-400 mt-1.5">Role cannot be changed.</p>
+            </div>
+            <div className="flex justify-end space-x-2 pt-2">
+              <Button type="button" variant="secondary" onClick={handleCancel} disabled={saving}>Cancel</Button>
+              <Button type="submit" disabled={saving || !dirty}>
+                {saving ? 'Saving…' : 'Save changes'}
+              </Button>
+            </div>
+          </form>
+        </Card>
+
+        <Card>
           <h2 className="text-lg font-semibold text-gray-800">Security</h2>
-          <p className="text-sm text-gray-500 mt-0.5 mb-4">Change your account password.</p>
-        </div>
-        {passSuccess && (
-          <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-md">{passSuccess}</div>
-        )}
-        {passError && (
-          <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-md">{passError}</div>
-        )}
-        <form onSubmit={handlePasswordSave} className="space-y-5">
-          <div>
-            <label htmlFor="current-password" className="block text-sm font-medium text-gray-700 mb-1.5">Current password</label>
-            <input
-              id="current-password"
-              type="password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              className={inputClass}
-              autoComplete="current-password"
-              required
-            />
-          </div>
-          <div>
-            <label htmlFor="new-password" className="block text-sm font-medium text-gray-700 mb-1.5">New password</label>
-            <input
-              id="new-password"
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className={inputClass}
-              autoComplete="new-password"
-              required
-            />
-          </div>
-          <div>
-            <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-700 mb-1.5">Confirm new password</label>
-            <input
-              id="confirm-password"
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className={inputClass}
-              autoComplete="new-password"
-              required
-            />
-          </div>
-          <div className="flex justify-end pt-2">
-            <Button type="submit" disabled={passSaving}>
-              {passSaving ? 'Changing…' : 'Change password'}
-            </Button>
-          </div>
-        </form>
-      </Card>
+          <p className="text-sm text-gray-500 mt-0.5 mb-5">Change your account password.</p>
+          {passSuccess && (
+            <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-md">{passSuccess}</div>
+          )}
+          {passError && (
+            <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-md">{passError}</div>
+          )}
+          <form onSubmit={handlePasswordSave} className="space-y-5">
+            <div>
+              <label htmlFor="current-password" className="block text-sm font-medium text-gray-700 mb-1.5">Current password</label>
+              <input
+                id="current-password"
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                className={inputClass}
+                autoComplete="current-password"
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor="new-password" className="block text-sm font-medium text-gray-700 mb-1.5">New password</label>
+              <input
+                id="new-password"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className={inputClass}
+                autoComplete="new-password"
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-700 mb-1.5">Confirm new password</label>
+              <input
+                id="confirm-password"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className={inputClass}
+                autoComplete="new-password"
+                required
+              />
+            </div>
+            <div className="flex justify-end pt-2">
+              <Button type="submit" disabled={passSaving}>
+                {passSaving ? 'Changing…' : 'Change password'}
+              </Button>
+            </div>
+          </form>
+        </Card>
+      </div>
     </div>
   );
 };
