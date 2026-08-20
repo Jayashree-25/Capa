@@ -27,6 +27,7 @@ export const login = (data) => api.post('/auth/login', data);
 export const registerUser = (data) => api.post('/auth/register', data);
 export const getUsers = () => api.get('/auth/users');
 export const updateProfile = (data) => api.patch('/auth/profile', data);
+export const changePassword = (data) => api.patch('/auth/password', data);
 
 // People
 export const getPeople = () => api.get('/people');
