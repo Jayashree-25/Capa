@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
-import { updateProfile } from '../services/api';
+import { updateProfile, changePassword } from '../services/api';
 
 const ROLE_BADGE = {
   boss: 'bg-gray-900 text-white',
@@ -21,6 +21,13 @@ const Profile = ({ user, onUserUpdated }) => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [dirty, setDirty] = useState(false);
+
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passSaving, setPassSaving] = useState(false);
+  const [passError, setPassError] = useState('');
+  const [passSuccess, setPassSuccess] = useState('');
 
   useEffect(() => {
     setName(user.displayName || user.personName || '');
@@ -50,6 +57,32 @@ const Profile = ({ user, onUserUpdated }) => {
     setError('');
     setSuccess('');
     setDirty(false);
+  };
+
+  const handlePasswordSave = async (e) => {
+    e.preventDefault();
+    setPassError('');
+    setPassSuccess('');
+    if (newPassword.length < 8) {
+      setPassError('New password must be at least 8 characters.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPassError('Passwords do not match.');
+      return;
+    }
+    setPassSaving(true);
+    try {
+      await changePassword({ currentPassword, newPassword });
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setPassSuccess('Password changed successfully.');
+    } catch (err) {
+      setPassError(err.response?.data?.error || err.message);
+    } finally {
+      setPassSaving(false);
+    }
   };
 
   return (
@@ -97,6 +130,62 @@ const Profile = ({ user, onUserUpdated }) => {
             <Button type="button" variant="secondary" onClick={handleCancel} disabled={saving}>Cancel</Button>
             <Button type="submit" disabled={saving || !dirty}>
               {saving ? 'Saving…' : 'Save changes'}
+            </Button>
+          </div>
+        </form>
+      </Card>
+
+      <Card>
+        <div className="flex flex-col">
+          <h2 className="text-lg font-semibold text-gray-800">Security</h2>
+          <p className="text-sm text-gray-500 mt-0.5 mb-4">Change your account password.</p>
+        </div>
+        {passSuccess && (
+          <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-md">{passSuccess}</div>
+        )}
+        {passError && (
+          <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-md">{passError}</div>
+        )}
+        <form onSubmit={handlePasswordSave} className="space-y-5">
+          <div>
+            <label htmlFor="current-password" className="block text-sm font-medium text-gray-700 mb-1.5">Current password</label>
+            <input
+              id="current-password"
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              className={inputClass}
+              autoComplete="current-password"
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="new-password" className="block text-sm font-medium text-gray-700 mb-1.5">New password</label>
+            <input
+              id="new-password"
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              className={inputClass}
+              autoComplete="new-password"
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-700 mb-1.5">Confirm new password</label>
+            <input
+              id="confirm-password"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className={inputClass}
+              autoComplete="new-password"
+              required
+            />
+          </div>
+          <div className="flex justify-end pt-2">
+            <Button type="submit" disabled={passSaving}>
+              {passSaving ? 'Changing…' : 'Change password'}
             </Button>
           </div>
         </form>
