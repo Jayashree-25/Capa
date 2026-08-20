@@ -55,9 +55,9 @@ const People = () => {
   }
 
   const renderRow = (person, indented) => (
-    <tr key={person.id} className="border-b border-gray-100">
-      <td className={`p-2.5 ${indented ? 'pl-8' : ''}`}>
-        <span className={person.role === 'lead' ? 'font-semibold text-gray-900' : 'font-medium text-gray-700'}>
+    <tr key={person.id} className={`border-b border-gray-100 ${person.role === 'lead' ? 'bg-blue-50/40' : ''}`}>
+      <td className={`p-2.5 ${indented ? 'pl-12' : ''}`}>
+        <span className={person.role === 'lead' ? 'font-bold text-gray-900' : 'font-normal text-gray-600'}>
           {person.name}
         </span>
         {person.role === 'lead' && (
@@ -108,11 +108,11 @@ const People = () => {
               </tr>
             </thead>
             <tbody>
-              {groups.map(g => (
+              {groups.map((g, gIndex) => (
                 <Fragment key={g.team}>
-                  <tr className="bg-gray-50/70">
-                    <td colSpan={5} className="px-2.5 py-2">
-                      <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">{g.team}</span>
+                  <tr className={`px-2.5 py-2.5 bg-gray-50/70 ${gIndex === 0 ? '' : 'border-t border-gray-200'}`}>
+                    <td colSpan={5} className="px-2.5 py-2.5">
+                      <span className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">{g.team}</span>
                     </td>
                   </tr>
                   {g.leads.map(person => renderRow(person, false))}
