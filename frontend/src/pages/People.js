@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Fragment } from 'react';
 import { Spinner } from '../components/Spinner';
 import { getPeople, deletePerson } from '../services/api';
 
@@ -36,6 +36,49 @@ const People = () => {
 
   const peopleById = Object.fromEntries(people.map(p => [p.id, p]));
 
+  const groups = [];
+  const teamIndex = {};
+  for (const p of people) {
+    const team = p.team || 'No team';
+    if (!(team in teamIndex)) {
+      teamIndex[team] = groups.length;
+      groups.push({ team, leads: [], members: [], solo: [] });
+    }
+    const g = groups[teamIndex[team]];
+    if (p.role === 'lead') {
+      g.leads.push(p);
+    } else if (p.managerId && peopleById[p.managerId]?.role === 'lead') {
+      g.members.push(p);
+    } else {
+      g.solo.push(p);
+    }
+  }
+
+  const renderRow = (person, indented) => (
+    <tr key={person.id} className="border-b border-gray-100">
+      <td className={`p-2.5 ${indented ? 'pl-8' : ''}`}>
+        <span className={person.role === 'lead' ? 'font-semibold text-gray-900' : 'font-medium text-gray-700'}>
+          {person.name}
+        </span>
+        {person.role === 'lead' && (
+          <span className="ml-2 text-xs font-medium bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">Lead</span>
+        )}
+      </td>
+      <td className="p-2.5 capitalize text-gray-700">{person.role}</td>
+      <td className="p-2.5 text-right">{person.weeklyCapacity}h</td>
+      <td className="p-2.5 text-center">
+        <span className="inline-block bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded-full">Active</span>
+      </td>
+      <td className="p-2.5 text-right">
+        <button
+          onClick={() => handleDelete(person)}
+          className="text-gray-300 hover:text-red-500"
+          title="Delete person"
+        >✕</button>
+      </td>
+    </tr>
+  );
+
   if (loading) return <div className="flex justify-center py-16"><Spinner /></div>;
 
   return (
@@ -54,46 +97,28 @@ const People = () => {
 
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse min-w-[720px]">
+          <table className="w-full text-sm border-collapse min-w-[600px]">
             <thead>
               <tr className="bg-gray-50">
                 <th className="text-left p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Person</th>
                 <th className="text-left p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Role</th>
-                <th className="text-left p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Team</th>
-                <th className="text-left p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Reports to</th>
                 <th className="text-right p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Capacity</th>
                 <th className="text-center p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Status</th>
                 <th className="text-right p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {people.map(person => (
-                <tr key={person.id} className="border-b border-gray-100">
-                  <td className="p-2.5">
-                    <span className="font-semibold text-gray-900">{person.name}</span>
-                    {person.role === 'lead' && (
-                      <span className="ml-2 text-xs font-medium bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">Lead</span>
-                    )}
-                  </td>
-                  <td className="p-2.5 capitalize text-gray-700">{person.role}</td>
-                  <td className="p-2.5 text-gray-600">{person.team}</td>
-                  <td className="p-2.5 text-gray-600">
-                    {person.role === 'lead'
-                      ? 'Boss'
-                      : (person.managerId ? (peopleById[person.managerId]?.name || '—') : '—')}
-                  </td>
-                  <td className="p-2.5 text-right">{person.weeklyCapacity}h</td>
-                  <td className="p-2.5 text-center">
-                    <span className="inline-block bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded-full">Active</span>
-                  </td>
-                  <td className="p-2.5 text-right">
-                    <button
-                      onClick={() => handleDelete(person)}
-                      className="text-gray-300 hover:text-red-500"
-                      title="Delete person"
-                    >✕</button>
-                  </td>
-                </tr>
+              {groups.map(g => (
+                <Fragment key={g.team}>
+                  <tr className="bg-gray-50/70">
+                    <td colSpan={5} className="px-2.5 py-2">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">{g.team}</span>
+                    </td>
+                  </tr>
+                  {g.leads.map(person => renderRow(person, false))}
+                  {g.members.map(person => renderRow(person, true))}
+                  {g.solo.map(person => renderRow(person, false))}
+                </Fragment>
               ))}
             </tbody>
           </table>
