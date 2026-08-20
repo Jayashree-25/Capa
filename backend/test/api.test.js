@@ -718,3 +718,68 @@ test('delegated capacity: parent hours suppressed, chunks count once for their a
   assert.strictEqual(row(month, m1.id).totalAssignedHours, 10); // chunks were deleted; only the normal task remains
   assert.strictEqual(row(month, lead.id).totalAssignedHours, 70);
 });
+
+test('profile update: boss edits own name and email, role cannot be changed', async () => {
+  const patch = (body) => request('/auth/profile', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  // name update -> displayName set, person record untouched
+  const nameRes = await patch({ name: 'Zara Nova' });
+  assert.strictEqual(nameRes.status, 200);
+  const afterName = await nameRes.json();
+  assert.strictEqual(afterName.displayName, 'Zara Nova');
+  assert.strictEqual(afterName.personName, 'Zara');
+
+  const peopleRes = await request('/people');
+  const zara = (await peopleRes.json()).find(p => p.id === 'p-9');
+  assert.strictEqual(zara.name, 'Zara');
+
+  // me reflects displayName
+  const meRes = await request('/auth/me');
+  const me = await meRes.json();
+  assert.strictEqual(me.displayName, 'Zara Nova');
+
+  // email update -> new email logs in, old email no longer works
+  const emailRes = await patch({ email: 'boss2@capa.test' });
+  assert.strictEqual(emailRes.status, 200);
+  const afterEmail = await emailRes.json();
+  assert.strictEqual(afterEmail.email, 'boss2@capa.test');
+
+  const newLogin = await apiFetch('/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'boss2@capa.test', password: BOSS_PASSWORD })
+  });
+  assert.strictEqual(newLogin.status, 200);
+  assert.strictEqual((await newLogin.json()).user.email, 'boss2@capa.test');
+
+  const oldLogin = await apiFetch('/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: BOSS_EMAIL, password: BOSS_PASSWORD })
+  });
+  assert.strictEqual(oldLogin.status, 401);
+
+  // duplicate email -> 409
+  const dup = await patch({ email: 'engineer@capa.test' });
+  assert.strictEqual(dup.status, 409);
+
+  // role cannot be changed
+  assert.strictEqual((await patch({ role: 'lead' })).status, 400);
+  assert.strictEqual((await patch({ role: 'boss', name: 'X' })).status, 400);
+
+  // validation
+  assert.strictEqual((await patch({ name: '   ' })).status, 400);
+  assert.strictEqual((await patch({ email: 'not-an-email' })).status, 400);
+  assert.strictEqual((await patch({})).status, 400);
+
+  // self-only: no other user is affected
+  const usersRes = await request('/auth/users');
+  const users = await usersRes.json();
+  const engineer = users.find(u => u.email === 'engineer@capa.test');
+  assert.strictEqual(engineer.displayName, null);
+  assert.strictEqual(engineer.email, 'engineer@capa.test');
+});
