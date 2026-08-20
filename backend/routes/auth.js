@@ -21,13 +21,14 @@ const toPublicUser = (row) => ({
   role: row.role,
   personId: row.person_id,
   personName: row.person_name,
+  displayName: row.display_name || null,
   personRole: row.person_role || null,
   personTeam: row.person_team || null,
   createdAt: row.created_at
 });
 
 const USER_SELECT = `
-  SELECT u.id, u.email, u.role, u.person_id, u.created_at, p.name AS person_name,
+  SELECT u.id, u.email, u.role, u.person_id, u.display_name, u.created_at, p.name AS person_name,
          p.role AS person_role, p.team AS person_team
   FROM users u
   LEFT JOIN people p ON p.id = u.person_id
@@ -121,6 +122,55 @@ router.get('/me', requireAuth, async (req, res) => {
     res.json(toPublicUser(user));
   } catch (err) {
     res.status(500).json({ error: `Failed to fetch user: ${err.message}` });
+  }
+});
+
+// PATCH /api/auth/profile — update the authenticated user's own profile (name/email only)
+router.patch('/profile', requireAuth, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const allowed = ['name', 'email'];
+    const forbidden = Object.keys(body).filter(k => !allowed.includes(k));
+    if (forbidden.length > 0) {
+      return res.status(400).json({ error: `Field(s) cannot be changed: ${forbidden.join(', ')}.` });
+    }
+    if (body.name === undefined && body.email === undefined) {
+      return res.status(400).json({ error: 'Nothing to update.' });
+    }
+
+    const pool = getPool();
+    const user = await findUserById(req.user.sub);
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+
+    let name = user.display_name || user.person_name || null;
+    if (body.name !== undefined) {
+      if (typeof body.name !== 'string' || body.name.trim() === '') {
+        return res.status(400).json({ error: 'Name must be a non-empty string.' });
+      }
+      if (body.name.trim().length > 120) {
+        return res.status(400).json({ error: 'Name must be at most 120 characters.' });
+      }
+      name = body.name.trim();
+    }
+
+    let email = user.email;
+    if (body.email !== undefined) {
+      if (typeof body.email !== 'string' || !EMAIL_RE.test(body.email.trim())) {
+        return res.status(400).json({ error: 'A valid email is required.' });
+      }
+      email = body.email.trim().toLowerCase();
+      if (email !== user.email) {
+        const dup = await pool.query('SELECT 1 FROM users WHERE lower(email) = $1 AND id <> $2', [email, user.id]);
+        if (dup.rowCount > 0) {
+          return res.status(409).json({ error: 'A user with this email already exists.' });
+        }
+      }
+    }
+
+    await pool.query('UPDATE users SET display_name = $1, email = $2 WHERE id = $3', [name, email, user.id]);
+    res.json(toPublicUser(await findUserById(user.id)));
+  } catch (err) {
+    res.status(500).json({ error: `Failed to update profile: ${err.message}` });
   }
 });
 
