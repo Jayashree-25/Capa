@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Switch, Route, Redirect } from 'react-router-d
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
 import People from './pages/People';
+import Projects from './pages/Projects';
 import Users from './pages/Users';
 import Profile from './pages/Profile';
 import Shell from './components/Shell';
@@ -12,7 +13,6 @@ import { getUser, setUser as persistUser, clearAuth } from './services/auth';
 
 const PLACEHOLDER_PAGES = [
   { path: '/tasks', title: 'Tasks' },
-  { path: '/projects', title: 'Projects' },
   { path: '/organization', title: 'Organization' }
 ];
 
@@ -45,6 +45,7 @@ function App() {
                 <Route exact path="/dashboard" render={() => <Dashboard user={user} />} />
                 <Route exact path="/profile" render={() => <Profile user={user} onUserUpdated={handleUserUpdated} />} />
                 <RoleRoute user={user} roles={['boss', 'lead']} exact path="/people" render={() => <People />} />
+                <RoleRoute user={user} roles={['boss', 'lead']} exact path="/projects" render={() => <Projects />} />
                 <RoleRoute user={user} roles={['boss']} exact path="/users" render={() => <Users />} />
                 {PLACEHOLDER_PAGES.map(page => (
                   <RoleRoute key={page.path} user={user} roles={['boss', 'lead']} exact path={page.path} render={() => <Placeholder title={page.title} />} />
