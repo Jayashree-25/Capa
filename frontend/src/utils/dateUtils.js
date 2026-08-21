@@ -48,6 +48,19 @@ export const formatMonthLabel = (iso) => {
 
 export const monthKeyOfIso = (iso) => (iso ? iso.slice(0, 7) : null);
 
+export const mondaysInMonth = (monthKey) => {
+  const [year, month] = monthKey.split('-').map(Number);
+  let count = 0;
+  const first = new Date(year, month - 1, 1);
+  let cursor = getMonday(first);
+  while (cursor < first) cursor = addWeeks(cursor, 1);
+  while (cursor.getFullYear() === year && cursor.getMonth() === month - 1) {
+    count += 1;
+    cursor = addWeeks(cursor, 1);
+  }
+  return count;
+};
+
 // Build up to `count` bucket keys starting at `start` (Monday for weeks, YYYY-MM for months)
 export const buildBuckets = (granularity, start, count) => {
   const keys = [];
