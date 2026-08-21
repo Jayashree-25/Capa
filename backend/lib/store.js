@@ -4,7 +4,7 @@ const loadData = async () => {
   const pool = getPool();
   const [peopleRes, projectsRes, tasksRes] = await Promise.all([
     pool.query(`
-      SELECT id, name, team, weekly_capacity AS "weeklyCapacity", manager_id AS "managerId", role
+      SELECT id, name, team, weekly_capacity AS "weeklyCapacity", manager_id AS "managerId", role, status
       FROM people
       ORDER BY name
     `),
@@ -47,15 +47,16 @@ const saveData = async (data) => {
 
     for (const p of data.people || []) {
       await client.query(`
-        INSERT INTO people (id, name, team, weekly_capacity, manager_id, role)
-        VALUES ($1, $2, $3, $4, NULL, $5)
+        INSERT INTO people (id, name, team, weekly_capacity, manager_id, role, status)
+        VALUES ($1, $2, $3, $4, NULL, $5, $6)
         ON CONFLICT (id) DO UPDATE SET
           name = EXCLUDED.name,
           team = EXCLUDED.team,
           weekly_capacity = EXCLUDED.weekly_capacity,
           manager_id = NULL,
-          role = EXCLUDED.role
-      `, [p.id, p.name, p.team, p.weeklyCapacity, p.role || 'member']);
+          role = EXCLUDED.role,
+          status = EXCLUDED.status
+      `, [p.id, p.name, p.team, p.weeklyCapacity, p.role || 'member', p.status || 'active']);
     }
 
     for (const p of data.people || []) {
