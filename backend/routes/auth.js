@@ -24,11 +24,12 @@ const toPublicUser = (row) => ({
   displayName: row.display_name || null,
   personRole: row.person_role || null,
   personTeam: row.person_team || null,
+  needsPasswordSetup: row.password_set === false,
   createdAt: row.created_at
 });
 
 const USER_SELECT = `
-  SELECT u.id, u.email, u.role, u.person_id, u.display_name, u.created_at, p.name AS person_name,
+  SELECT u.id, u.email, u.role, u.person_id, u.display_name, u.password_set, u.created_at, p.name AS person_name,
          p.role AS person_role, p.team AS person_team
   FROM users u
   LEFT JOIN people p ON p.id = u.person_id
@@ -39,16 +40,17 @@ const findUserById = async (id) => {
   return rows[0] || null;
 };
 
-// POST /api/auth/register — create a user (boss only; bootstrapped via `npm run create:user`)
+// POST /api/auth/register — create a user + optional person (boss only)
 router.post('/register', requireAuth, requireRole('boss'), async (req, res) => {
   try {
-    const { email, password, role = 'engineer', personId = null } = req.body || {};
+    const { email, password, role = 'engineer', personId = null,
+            personName, personTeam, personWeeklyCapacity } = req.body || {};
 
     if (!email || typeof email !== 'string' || !EMAIL_RE.test(email.trim())) {
       return res.status(400).json({ error: 'A valid email is required.' });
     }
-    if (!password || typeof password !== 'string' || password.length < 8) {
-      return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+    if (password !== undefined && password !== null && typeof password === 'string' && password.length > 0 && password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters if provided.' });
     }
     if (!ROLES.includes(role)) {
       return res.status(400).json({ error: `Role must be one of: ${ROLES.join(', ')}.` });
@@ -62,9 +64,13 @@ router.post('/register', requireAuth, requireRole('boss'), async (req, res) => {
       return res.status(409).json({ error: 'A user with this email already exists.' });
     }
 
+    // Resolve person: either link existing or create inline
+    let finalPersonId = personId || null;
     let finalRole = role;
-    if (personId) {
-      const person = await pool.query('SELECT id, role FROM people WHERE id = $1', [personId]);
+
+    if (finalPersonId) {
+      // Link existing person
+      const person = await pool.query('SELECT id, role FROM people WHERE id = $1', [finalPersonId]);
       if (person.rowCount === 0) {
         return res.status(400).json({ error: 'Person does not exist.' });
       }
@@ -73,17 +79,48 @@ router.post('/register', requireAuth, requireRole('boss'), async (req, res) => {
       } else if (role === 'lead') {
         return res.status(400).json({ error: 'A member cannot have a lead account. Mark this person as a lead first.' });
       }
-      const linked = await pool.query('SELECT 1 FROM users WHERE person_id = $1', [personId]);
+      const linked = await pool.query('SELECT 1 FROM users WHERE person_id = $1', [finalPersonId]);
       if (linked.rowCount > 0) {
         return res.status(409).json({ error: 'That person already has a user account.' });
       }
+    } else if (personName && personTeam) {
+      // Create person inline
+      if (typeof personName !== 'string' || personName.trim() === '') {
+        return res.status(400).json({ error: 'Person name must be a non-empty string.' });
+      }
+      if (typeof personTeam !== 'string' || personTeam.trim() === '') {
+        return res.status(400).json({ error: 'Team must be a non-empty string.' });
+      }
+      const capacity = personWeeklyCapacity === undefined ? 40 : personWeeklyCapacity;
+      if (typeof capacity !== 'number' || !Number.isFinite(capacity) || capacity <= 0 || capacity > 168) {
+        return res.status(400).json({ error: 'Weekly capacity must be a positive number (max 168).' });
+      }
+      const personRole = role === 'lead' ? 'lead' : 'member';
+      const personIdNew = `p-${Date.now()}`;
+      await pool.query(
+        'INSERT INTO people (id, name, team, weekly_capacity, role) VALUES ($1, $2, $3, $4, $5)',
+        [personIdNew, personName.trim(), personTeam.trim(), capacity, personRole]
+      );
+      finalPersonId = personIdNew;
+      finalRole = role === 'lead' ? 'lead' : 'engineer';
     }
 
+    // Create user account
     const id = `u-${Date.now()}`;
-    const passwordHash = await bcrypt.hash(password, 10);
+    let passwordHash;
+    let passwordSet = true;
+
+    if (password && typeof password === 'string' && password.length >= 8) {
+      passwordHash = await bcrypt.hash(password, 10);
+    } else {
+      // No password provided — account needs password setup on first login
+      passwordHash = await bcrypt.hash(`__pending_${id}_${Date.now()}`, 10);
+      passwordSet = false;
+    }
+
     await pool.query(
-      'INSERT INTO users (id, email, password_hash, role, person_id) VALUES ($1, $2, $3, $4, $5)',
-      [id, normalizedEmail, passwordHash, finalRole, personId || null]
+      'INSERT INTO users (id, email, password_hash, role, person_id, password_set) VALUES ($1, $2, $3, $4, $5, $6)',
+      [id, normalizedEmail, passwordHash, finalRole, finalPersonId, passwordSet]
     );
     res.status(201).json(toPublicUser(await findUserById(id)));
   } catch (err) {
@@ -107,6 +144,15 @@ router.post('/login', async (req, res) => {
     const user = rows[0];
     if (!user || !(await bcrypt.compare(password, user.password_hash))) {
       return res.status(401).json({ error: 'Invalid email or password.' });
+    }
+    if (user.password_set === false) {
+      // First-time login: require password setup before issuing token
+      const setupToken = jwt.sign(
+        { sub: user.id, email: user.email, purpose: 'password-setup' },
+        getJwtSecret(),
+        { expiresIn: '1h' }
+      );
+      return res.json({ needsPasswordSetup: true, setupToken, user: toPublicUser(user) });
     }
     res.json({ token: signToken(user), user: toPublicUser(user) });
   } catch (err) {
@@ -196,10 +242,50 @@ router.patch('/password', requireAuth, async (req, res) => {
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
-    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, user.id]);
+    await pool.query('UPDATE users SET password_hash = $1, password_set = TRUE WHERE id = $2', [passwordHash, user.id]);
     res.json({ message: 'Password changed successfully.' });
   } catch (err) {
     res.status(500).json({ error: `Failed to change password: ${err.message}` });
+  }
+});
+
+// POST /api/auth/set-password — first-time password setup (requires setupToken from login)
+router.post('/set-password', async (req, res) => {
+  try {
+    const { setupToken, newPassword } = req.body || {};
+    if (!setupToken || typeof setupToken !== 'string') {
+      return res.status(400).json({ error: 'Setup token is required.' });
+    }
+    if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 8) {
+      return res.status(400).json({ error: 'New password must be at least 8 characters.' });
+    }
+
+    let payload;
+    try {
+      payload = jwt.verify(setupToken, getJwtSecret());
+    } catch {
+      return res.status(401).json({ error: 'Invalid or expired setup token.' });
+    }
+    if (payload.purpose !== 'password-setup') {
+      return res.status(401).json({ error: 'Invalid token purpose.' });
+    }
+
+    const pool = getPool();
+    const { rows } = await pool.query('SELECT id, password_set FROM users WHERE id = $1', [payload.sub]);
+    const user = rows[0];
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+    if (user.password_set) {
+      return res.status(400).json({ error: 'Password has already been set.' });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await pool.query('UPDATE users SET password_hash = $1, password_set = TRUE WHERE id = $2', [passwordHash, user.id]);
+
+    // Find user and sign a real token
+    const fullUser = await findUserById(user.id);
+    res.json({ token: signToken(fullUser), user: toPublicUser(fullUser) });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to set password: ${err.message}` });
   }
 });
 
