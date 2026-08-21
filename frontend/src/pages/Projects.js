@@ -77,7 +77,6 @@ const Projects = () => {
                 <th className="text-left p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Project</th>
                 <th className="text-left p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Description</th>
                 <th className="text-left p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Owner</th>
-                <th className="text-left p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Role</th>
                 <th className="text-center p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Status</th>
                 <th className="text-right p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Actions</th>
               </tr>
@@ -88,15 +87,6 @@ const Projects = () => {
                   <td className="p-2.5 font-semibold text-gray-900">{project.name}</td>
                   <td className="p-2.5 text-gray-600 max-w-[250px] truncate">{project.description || '—'}</td>
                   <td className="p-2.5 text-gray-700">{project.ownerName || '—'}</td>
-                  <td className="p-2.5">
-                    {project.ownerRole && (
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                        project.ownerRole === 'lead' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'
-                      }`}>
-                        {project.ownerRole === 'lead' ? 'Lead' : 'Member'}
-                      </span>
-                    )}
-                  </td>
                   <td className="p-2.5 text-center">
                     <span className="inline-block bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded-full">Active</span>
                   </td>
@@ -116,7 +106,7 @@ const Projects = () => {
               ))}
               {projects.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-gray-400">
+                  <td colSpan={5} className="p-8 text-center text-gray-400">
                     No projects yet. Click "+ Add Project" to create one.
                   </td>
                 </tr>
