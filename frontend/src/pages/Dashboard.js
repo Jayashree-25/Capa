@@ -10,7 +10,7 @@ import {
   todayMonday, firstOfMonth, addWeeks, addMonths, buildBuckets,
   formatWeekLabel, formatMonthLabel, toISO
 } from '../utils/dateUtils';
-import { buildHierarchyRows } from '../utils/hierarchy';
+import { calcPersonBuckets, buildProjectHierarchy } from '../utils/projectHierarchy';
 
 const WEEK_COUNT = 6;
 const MONTH_COUNT = 3;
@@ -49,7 +49,7 @@ const Dashboard = ({ user }) => {
   const [chunkModalOpen, setChunkModalOpen] = useState(false);
   const [chunkParent, setChunkParent] = useState(null);
   const [dropTarget, setDropTarget] = useState(null);
-  const [collapsedLeads, setCollapsedLeads] = useState(() => new Set());
+  const [collapsedProjects, setCollapsedProjects] = useState(() => new Set());
 
   const buckets = buildBuckets(granularity, periodStart, granularity === 'week' ? WEEK_COUNT : MONTH_COUNT);
 
@@ -143,45 +143,13 @@ const Dashboard = ({ user }) => {
     setPeriodStart(prev => granularity === 'week' ? addWeeks(prev, dir * WEEK_COUNT) : addMonths(prev, dir * MONTH_COUNT));
   };
 
-  const toggleLead = (leadId) => {
-    setCollapsedLeads(prev => {
+  const toggleProject = (projectId) => {
+    setCollapsedProjects(prev => {
       const next = new Set(prev);
-      if (next.has(leadId)) next.delete(leadId);
-      else next.add(leadId);
+      if (next.has(projectId)) next.delete(projectId);
+      else next.add(projectId);
       return next;
     });
-  };
-
-  const getTeamAggregation = (leadPerson, members) => {
-    const allPeople = [leadPerson, ...members];
-    const activePeople = allPeople.filter(p => p.status !== 'inactive');
-    if (activePeople.length === 0) {
-      return {
-        teamCapacity: 0,
-        teamAssigned: 0,
-        teamAvailable: 0,
-        teamOverloaded: false,
-        buckets: leadPerson.buckets.map(b => ({ ...b, assignedHours: 0, capacityHours: 0, utilization: 0, overloaded: false })),
-        activeCount: 0,
-        totalCount: allPeople.length
-      };
-    }
-    const teamCapacity = activePeople.reduce((sum, p) => sum + (p.weeklyCapacity || 0), 0);
-    const teamAssigned = activePeople.reduce((sum, p) => sum + (p.totalAssignedHours || 0), 0);
-    const teamAvailable = Math.max(0, teamCapacity - teamAssigned);
-    const teamOverloaded = teamAssigned > teamCapacity;
-    const buckets = leadPerson.buckets.map((leadBucket, i) => {
-      const bucketAssigned = activePeople.reduce((sum, p) => sum + (p.buckets[i]?.assignedHours || 0), 0);
-      const bucketCapacity = activePeople.reduce((sum, p) => sum + (p.buckets[i]?.capacityHours || 0), 0);
-      return {
-        key: leadBucket.key,
-        assignedHours: bucketAssigned,
-        capacityHours: bucketCapacity,
-        utilization: bucketCapacity > 0 ? Number((bucketAssigned / bucketCapacity).toFixed(3)) : 0,
-        overloaded: bucketAssigned > bucketCapacity
-      };
-    });
-    return { teamCapacity, teamAssigned, teamAvailable, teamOverloaded, buckets, activeCount: activePeople.length, totalCount: allPeople.length };
   };
 
   const rangeLabel = granularity === 'week'
@@ -208,57 +176,15 @@ const Dashboard = ({ user }) => {
   const delegatedParentIds = new Set(tasks.filter(t => t.parentId).map(t => t.parentId));
 
   const groups = taskGroups();
-  const hierarchyRows = isBoss && report ? buildHierarchyRows(report.people) : [];
 
-  const renderTeamRow = (leadPerson, members) => {
-    const agg = getTeamAggregation(leadPerson, members);
-    return (
-      <tr
-        key={`team-${leadPerson.id}`}
-        className={`border-b border-gray-200 ${agg.teamOverloaded ? 'bg-red-50' : 'bg-gray-50'} font-semibold`}
-      >
-        <td className="p-2.5">
-          <div className="flex items-center gap-2">
-            <span className="w-6 inline-flex justify-center shrink-0">
-              <button
-                onClick={() => toggleLead(leadPerson.id)}
-                className="w-6 h-6 inline-flex items-center justify-center rounded hover:bg-gray-100 text-blue-600"
-                title="Expand members"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M6 9l6 6 6-6" />
-                </svg>
-              </button>
-            </span>
-            <span className="font-bold text-gray-900 whitespace-nowrap">{leadPerson.team || 'No Team'}</span>
-            <span className="text-xs font-medium bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">Team</span>
-            {agg.teamOverloaded && <span className="text-xs font-medium bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Overloaded</span>}
-          </div>
-          <div className="text-xs text-gray-500 ml-8 mt-0.5">Lead: {leadPerson.name}</div>
-        </td>
-        <td className="p-2.5 text-gray-600">{agg.activeCount} of {agg.totalCount} active</td>
-        <td className="p-2.5 text-right">{agg.teamCapacity}h</td>
-        {agg.buckets.map(bucket => (
-          <td key={bucket.key} className={`p-2 text-center border rounded m-0 ${cellStyle(bucket)}`}>
-            <span className="font-semibold">{bucket.assignedHours}h</span>
-            {granularity === 'week' && (
-              <span className="block text-[11px] opacity-70">of {bucket.capacityHours}h</span>
-            )}
-          </td>
-        ))}
-        <td className={`p-2.5 text-right font-bold ${agg.teamAssigned > agg.teamCapacity ? 'text-red-600' : ''}`}>
-          {agg.teamAssigned}h
-        </td>
-        <td className="p-2.5 text-center">
-          {agg.teamOverloaded
-            ? <span className="inline-block bg-red-600 text-white text-xs px-2 py-0.5 rounded-full">Overloaded</span>
-            : <span className="inline-block bg-green-600 text-white text-xs px-2 py-0.5 rounded-full">OK</span>}
-        </td>
-      </tr>
-    );
-  };
+  const perPersonData = report ? report.people.map(p => calcPersonBuckets(p, tasks, buckets, granularity, projectFilter || undefined)) : [];
+  const projectHierarchy = isBoss ? buildProjectHierarchy(perPersonData, projects, tasks, buckets, granularity) : [];
 
-  const renderPersonRow = (person, { isLead = false, isMember = false, isLast = false, hasMembers = false, collapsed = false } = {}) => (
+  const filteredProjectHierarchy = projectFilter
+    ? projectHierarchy.filter(p => p.id === projectFilter)
+    : projectHierarchy;
+
+  const renderPersonRow = (person, { isLead = false, isMember = false } = {}) => (
     <tr
       key={person.id}
       onDragOver={(e) => { e.preventDefault(); setDropTarget(person.id); }}
@@ -273,29 +199,6 @@ const Dashboard = ({ user }) => {
     >
       <td className={`p-2.5 ${isMember ? 'pl-12' : ''}`}>
         <div className="flex items-center gap-2">
-          {isLead && (
-            <span className="w-6 inline-flex justify-center shrink-0">
-              {hasMembers && (
-                <button
-                  onClick={() => toggleLead(person.id)}
-                  className={`w-6 h-6 inline-flex items-center justify-center rounded hover:bg-gray-100 ${collapsed ? 'text-gray-500' : 'text-blue-600'}`}
-                  title={collapsed ? 'Expand members' : 'Collapse members'}
-                >
-                  <svg
-                    className={`w-4 h-4 transition-transform duration-150 ${collapsed ? '-rotate-90' : ''}`}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M6 9l6 6 6-6" />
-                  </svg>
-                </button>
-              )}
-            </span>
-          )}
           <span className={`${isMember ? 'font-medium text-gray-600' : 'font-semibold text-gray-900'} whitespace-nowrap`}>{person.name}</span>
           {isLead && <span className="text-xs font-medium bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">Lead</span>}
           {person.overloaded && <span className="text-xs font-medium bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Overloaded</span>}
@@ -346,7 +249,7 @@ const Dashboard = ({ user }) => {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card><div className="text-sm text-gray-500">People in view</div><div className="text-3xl font-semibold tracking-tight text-gray-900">{report ? report.people.length : 0}</div></Card>
+        <Card><div className="text-sm text-gray-500">People in view</div><div className="text-3xl font-semibold tracking-tight text-gray-900">{perPersonData.length}</div></Card>
         <Card>
           <div className="text-sm text-gray-500">Overloaded</div>
           <div className={`text-3xl font-semibold tracking-tight ${overloadedCount > 0 ? 'text-red-600' : 'text-gray-900'}`}>
@@ -405,9 +308,19 @@ const Dashboard = ({ user }) => {
           <table className="w-full text-sm border-collapse min-w-[900px]">
             <thead>
               <tr className="bg-gray-50">
-                <th className="text-left p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Person</th>
-                <th className="text-left p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Team</th>
-                <th className="text-right p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Cap/wk</th>
+                {isBoss ? (
+                  <>
+                    <th className="text-left p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Project</th>
+                    <th className="text-left p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Team</th>
+                    <th className="text-right p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Cap/wk</th>
+                  </>
+                ) : (
+                  <>
+                    <th className="text-left p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Person</th>
+                    <th className="text-left p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Team</th>
+                    <th className="text-right p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Cap/wk</th>
+                  </>
+                )}
                 {buckets.map(key => (
                   <th key={key} className="text-center p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">
                     {granularity === 'week' ? formatWeekLabel(key) : formatMonthLabel(key)}
@@ -418,25 +331,132 @@ const Dashboard = ({ user }) => {
               </tr>
             </thead>
             <tbody>
-              {isBoss && report
-                ? hierarchyRows.map(row => {
-                    if (row.kind === 'lead') {
-                      const collapsed = collapsedLeads.has(row.person.id);
-                      return (
-                        <Fragment key={row.person.id}>
-                          {collapsed
-                            ? renderTeamRow(row.person, row.members)
-                            : renderPersonRow(row.person, { isLead: true, hasMembers: row.members.length > 0, collapsed })}
-                          {!collapsed && row.members.map((member, index) => renderPersonRow(member, { isMember: true, isLast: index === row.members.length - 1 }))}
-                        </Fragment>
-                      );
-                    }
-                    return renderPersonRow(row.person);
+              {isBoss
+                ? filteredProjectHierarchy.map(project => {
+                    const isCollapsed = collapsedProjects.has(project.id);
+                    const projectBuckets = buckets.map(key => {
+                      const assigned = project.teams.reduce((s, team) =>
+                        s + team.people.reduce((ps, p) => ps + (p.projectBuckets[key] || 0), 0), 0);
+                      const capacity = project.totalCapacity;
+                      const utilization = capacity > 0 ? assigned / capacity : 0;
+                      return {
+                        key,
+                        assignedHours: assigned,
+                        capacityHours: granularity === 'week' ? capacity : capacity * 1,
+                        utilization: Number(utilization.toFixed(3)),
+                        overloaded: assigned > capacity
+                      };
+                    });
+                    return (
+                      <Fragment key={project.id}>
+                        <tr
+                          className={`border-b border-gray-200 ${project.overloaded ? 'bg-red-50' : 'bg-gray-50'} font-semibold`}
+                        >
+                          <td className="p-2.5">
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => toggleProject(project.id)}
+                                className="w-6 h-6 inline-flex items-center justify-center rounded hover:bg-gray-100 text-blue-600 shrink-0"
+                                title={isCollapsed ? 'Expand project' : 'Collapse project'}
+                              >
+                                <svg
+                                  className={`w-4 h-4 transition-transform duration-150 ${isCollapsed ? '-rotate-90' : ''}`}
+                                  viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                                >
+                                  <path d="M6 9l6 6 6-6" />
+                                </svg>
+                              </button>
+                              <span className="font-bold text-gray-900 whitespace-nowrap">{project.name}</span>
+                              {project.overloaded && <span className="text-xs font-medium bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Overloaded</span>}
+                            </div>
+                          </td>
+                          <td className="p-2.5 text-gray-600">{project.teams.length} team{project.teams.length !== 1 ? 's' : ''}</td>
+                          <td className="p-2.5 text-right">{project.totalCapacity}h</td>
+                          {projectBuckets.map(bucket => (
+                            <td key={bucket.key} className={`p-2 text-center border rounded m-0 ${cellStyle(bucket)}`}>
+                              <span className="font-semibold">{bucket.assignedHours}h</span>
+                              {granularity === 'week' && (
+                                <span className="block text-[11px] opacity-70">of {bucket.capacityHours}h</span>
+                              )}
+                            </td>
+                          ))}
+                          <td className={`p-2.5 text-right font-bold ${project.totalAssigned > project.totalCapacity ? 'text-red-600' : ''}`}>
+                            {project.totalAssigned}h
+                          </td>
+                          <td className="p-2.5 text-center">
+                            {project.overloaded
+                              ? <span className="inline-block bg-red-600 text-white text-xs px-2 py-0.5 rounded-full">Overloaded</span>
+                              : <span className="inline-block bg-green-600 text-white text-xs px-2 py-0.5 rounded-full">OK</span>}
+                          </td>
+                        </tr>
+                        {!isCollapsed && project.teams.map(team => (
+                          <Fragment key={`${project.id}-${team.name}`}>
+                            <tr className="bg-gray-100/70 border-b border-gray-100">
+                              <td className="p-2 pl-8" colSpan="3">
+                                <span className="text-sm font-semibold text-gray-700">{team.name}</span>
+                                <span className="text-xs text-gray-500 ml-2">{team.people.length} people · {team.capacity}h cap · {team.assigned}h assigned</span>
+                              </td>
+                              {buckets.map(key => {
+                                const teamBucketAssigned = team.people.reduce((s, p) => s + (p.projectBuckets[key] || 0), 0);
+                                return (
+                                  <td key={key} className="p-2 text-center text-xs text-gray-600">
+                                    {teamBucketAssigned}h
+                                  </td>
+                                );
+                              })}
+                              <td className="p-2.5 text-right text-sm text-gray-600">{team.assigned}h</td>
+                              <td className="p-2.5 text-center">
+                                {team.assigned > team.capacity
+                                  ? <span className="inline-block bg-red-100 text-red-700 text-xs px-2 py-0.5 rounded-full">Overloaded</span>
+                                  : <span className="inline-block bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full">OK</span>}
+                              </td>
+                            </tr>
+                            {team.people.map(person => {
+                              const personOverloaded = person.totalAssignedHours > person.weeklyCapacity;
+                              return (
+                                <tr
+                                  key={person.id}
+                                  className={`border-b border-gray-50 ${personOverloaded ? 'bg-red-50/50' : ''}`}
+                                >
+                                  <td className="p-2.5 pl-16">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-medium text-gray-800">{person.name}</span>
+                                      <span className="text-xs text-gray-500">{person.displayRole}</span>
+                                      {personOverloaded && <span className="text-xs font-medium bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full">Overloaded</span>}
+                                    </div>
+                                  </td>
+                                  <td className="p-2.5 text-gray-500 text-sm">{person.team}</td>
+                                  <td className="p-2.5 text-right text-sm">{person.weeklyCapacity}h</td>
+                                  {person.buckets.map(bucket => (
+                                    <td key={bucket.key} className={`p-2 text-center border rounded m-0 ${cellStyle(bucket)}`}>
+                                      <span className="font-semibold">{bucket.assignedHours}h</span>
+                                      {granularity === 'week' && (
+                                        <span className="block text-[11px] opacity-70">of {bucket.capacityHours}h</span>
+                                      )}
+                                    </td>
+                                  ))}
+                                  <td className={`p-2.5 text-right text-sm font-semibold ${personOverloaded ? 'text-red-600' : ''}`}>
+                                    {person.totalAssignedHours}h
+                                  </td>
+                                  <td className="p-2.5 text-center">
+                                    {personOverloaded
+                                      ? <span className="inline-block bg-red-600 text-white text-xs px-2 py-0.5 rounded-full">Overloaded</span>
+                                      : <span className="inline-block bg-green-600 text-white text-xs px-2 py-0.5 rounded-full">OK</span>}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </Fragment>
+                        ))}
+                      </Fragment>
+                    );
                   })
                 : report && report.people.map(person => renderPersonRow(person))}
               {report && (
                 <tr className="bg-gray-100 font-semibold border-t-2 border-gray-200">
-                  <td className="p-2.5" colSpan="3">Team total</td>
+                  <td className="p-2.5" colSpan="3">
+                    {isBoss ? 'Project total' : 'Team total'}
+                  </td>
                   {report.teamTotals.map(bucket => (
                     <td key={bucket.key} className={`p-2 text-center ${bucket.overloaded ? 'text-red-600' : ''}`}>
                       {bucket.assignedHours}/{bucket.capacityHours}h
