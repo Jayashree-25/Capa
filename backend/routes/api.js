@@ -623,6 +623,7 @@ router.get('/reports/load', async (req, res) => {
         role: p.role,
         managerId: p.managerId,
         weeklyCapacity: p.weeklyCapacity,
+        status: p.status || 'active',
         buckets: bucketsReport,
         totalAssignedHours,
         totalCapacityHours,
