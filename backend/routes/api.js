@@ -258,7 +258,15 @@ router.get('/teams', async (req, res) => {
 // ---------- Projects ----------
 router.get('/projects', async (req, res) => {
   try {
-    res.json((await loadData()).projects);
+    const data = await loadData();
+    const peopleById = Object.fromEntries(data.people.map(p => [p.id, p]));
+    const enriched = data.projects.map(p => ({
+      ...p,
+      ownerName: p.ownerId ? (peopleById[p.ownerId]?.name || null) : null,
+      ownerRole: p.ownerId ? (peopleById[p.ownerId]?.role || null) : null,
+      ownerTeam: p.ownerId ? (peopleById[p.ownerId]?.team || null) : null
+    }));
+    res.json(enriched);
   } catch (error) {
     res.status(500).json({ error: `Failed to fetch projects: ${error.message}` });
   }
@@ -266,15 +274,40 @@ router.get('/projects', async (req, res) => {
 
 router.post('/projects', requireRole('boss', 'lead'), async (req, res) => {
   try {
-    const { name } = req.body || {};
+    const { name, description, ownerId } = req.body || {};
     if (!name || typeof name !== 'string' || name.trim() === '') {
       return res.status(400).json({ error: 'Project name is required and must be a non-empty string.' });
     }
     const data = await loadData();
-    const newProject = { id: `pr-${Date.now()}`, name: name.trim() };
+
+    // Validate owner if provided — must be a lead or a solo member (no manager)
+    if (ownerId !== null && ownerId !== undefined) {
+      const owner = data.people.find(p => p.id === ownerId);
+      if (!owner) return res.status(400).json({ error: 'Owner does not exist.' });
+      const isLead = owner.role === 'lead';
+      const isSoloMember = owner.role === 'member' && !owner.managerId;
+      if (!isLead && !isSoloMember) {
+        return res.status(400).json({ error: 'A project can only be assigned to a lead or a solo member (a member who does not report to a lead).' });
+      }
+    }
+
+    const newProject = {
+      id: `pr-${Date.now()}`,
+      name: name.trim(),
+      description: (description || '').trim(),
+      ownerId: ownerId ?? null
+    };
     data.projects.push(newProject);
     await saveData(data);
-    res.status(201).json(newProject);
+
+    const peopleById = Object.fromEntries(data.people.map(p => [p.id, p]));
+    const saved = data.projects[data.projects.length - 1];
+    res.status(201).json({
+      ...saved,
+      ownerName: saved.ownerId ? (peopleById[saved.ownerId]?.name || null) : null,
+      ownerRole: saved.ownerId ? (peopleById[saved.ownerId]?.role || null) : null,
+      ownerTeam: saved.ownerId ? (peopleById[saved.ownerId]?.team || null) : null
+    });
   } catch (err) {
     res.status(500).json({ error: `Failed to add project: ${err.message}` });
   }
@@ -282,24 +315,38 @@ router.post('/projects', requireRole('boss', 'lead'), async (req, res) => {
 
 router.put('/projects/:id', requireRole('boss', 'lead'), async (req, res) => {
   try {
-    const { ownerId } = req.body || {};
+    const { name, description, ownerId } = req.body || {};
     const data = await loadData();
     const index = data.projects.findIndex(p => p.id === req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Project not found.' });
 
     if (ownerId !== null && ownerId !== undefined) {
       const owner = data.people.find(p => p.id === ownerId);
-      if (!owner) return res.status(400).json({ error: 'Lead does not exist.' });
-      if (owner.role !== 'lead') {
-        return res.status(400).json({ error: 'A project can only be assigned to a lead.' });
+      if (!owner) return res.status(400).json({ error: 'Owner does not exist.' });
+      const isLead = owner.role === 'lead';
+      const isSoloMember = owner.role === 'member' && !owner.managerId;
+      if (!isLead && !isSoloMember) {
+        return res.status(400).json({ error: 'A project can only be assigned to a lead or a solo member (a member who does not report to a lead).' });
       }
     }
 
-    data.projects[index] = { ...data.projects[index], ownerId: ownerId ?? null };
+    const existing = data.projects[index];
+    data.projects[index] = {
+      ...existing,
+      name: name !== undefined ? name.trim() : existing.name,
+      description: description !== undefined ? (description || '').trim() : (existing.description || ''),
+      ownerId: ownerId !== undefined ? ownerId : existing.ownerId
+    };
     await saveData(data);
+
     const peopleById = Object.fromEntries(data.people.map(p => [p.id, p]));
     const updated = data.projects[index];
-    res.json({ ...updated, ownerName: updated.ownerId ? (peopleById[updated.ownerId]?.name || null) : null });
+    res.json({
+      ...updated,
+      ownerName: updated.ownerId ? (peopleById[updated.ownerId]?.name || null) : null,
+      ownerRole: updated.ownerId ? (peopleById[updated.ownerId]?.role || null) : null,
+      ownerTeam: updated.ownerId ? (peopleById[updated.ownerId]?.team || null) : null
+    });
   } catch (err) {
     res.status(500).json({ error: `Failed to assign project: ${err.message}` });
   }
