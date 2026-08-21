@@ -1,12 +1,7 @@
-import React, { useEffect, useState, useCallback, Fragment, useRef } from 'react';
-import { Button } from '../components/Button';
+import React, { useEffect, useState, useCallback, Fragment } from 'react';
 import { Card } from '../components/Card';
 import { Spinner } from '../components/Spinner';
-import PersonFormModal from '../components/PersonFormModal';
-import ProjectFormModal from '../components/ProjectFormModal';
-import TaskFormModal from '../components/TaskFormModal';
 import ChunkFormModal from '../components/ChunkFormModal';
-import AssignProjectModal from '../components/AssignProjectModal';
 import {
   getPeople, getProjects, getTasks, getTeamNames, getLoadReport,
   updateTask, deleteTask, deletePerson
@@ -35,43 +30,6 @@ const getDraggedTaskId = (dataTransfer) => {
   return plain && plain.startsWith('t-') ? plain : null;
 };
 
-const Caret = ({ open = false }) => (
-  <svg
-    className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    <path d="M6 9l6 6 6-6" />
-  </svg>
-);
-
-const ActionDropdown = ({ label, variant, open, onToggle, items }) => (
-  <div className="relative">
-    <Button variant={variant} onClick={onToggle} className="inline-flex items-center gap-1.5">
-      {label}
-      <Caret open={open} />
-    </Button>
-    {open && (
-      <div className="absolute right-0 top-full mt-1 z-20 w-56 bg-white border border-gray-200 rounded-md shadow-lg py-1">
-        {items.map(item => (
-          <button
-            key={item.label}
-            onClick={item.onClick}
-            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-    )}
-  </div>
-);
-
 const Dashboard = ({ user }) => {
   const isBoss = user.role === 'boss';
   const canManage = user.role === 'boss' || user.role === 'lead';
@@ -88,27 +46,10 @@ const Dashboard = ({ user }) => {
   const [teamFilter, setTeamFilter] = useState('');
   const [projectFilter, setProjectFilter] = useState('');
 
-  const [taskModalOpen, setTaskModalOpen] = useState(false);
-  const [taskSoloMode, setTaskSoloMode] = useState(false);
-  const [personModalOpen, setPersonModalOpen] = useState(false);
-  const [projectModalOpen, setProjectModalOpen] = useState(false);
-  const [assignProjectOpen, setAssignProjectOpen] = useState(false);
   const [chunkModalOpen, setChunkModalOpen] = useState(false);
   const [chunkParent, setChunkParent] = useState(null);
   const [dropTarget, setDropTarget] = useState(null);
   const [collapsedLeads, setCollapsedLeads] = useState(() => new Set());
-  const [openMenu, setOpenMenu] = useState(null);
-  const actionAreaRef = useRef(null);
-
-  useEffect(() => {
-    const onMouseDown = (e) => {
-      if (actionAreaRef.current && !actionAreaRef.current.contains(e.target)) {
-        setOpenMenu(null);
-      }
-    };
-    document.addEventListener('mousedown', onMouseDown);
-    return () => document.removeEventListener('mousedown', onMouseDown);
-  }, []);
 
   const buckets = buildBuckets(granularity, periodStart, granularity === 'week' ? WEEK_COUNT : MONTH_COUNT);
 
@@ -184,14 +125,6 @@ const Dashboard = ({ user }) => {
     }
   };
 
-  const handleCreatedPerson = async (person) => {
-    setPeople(prev => [...prev, person]);
-    setTeamNames((await getTeamNames()).data);
-    refreshReport();
-  };
-
-  const handleCreatedProject = (project) => setProjects(prev => [...prev, project]);
-
   const handleCreatedTask = () => {
     getTasks().then(res => setTasks(res.data));
     refreshReport();
@@ -205,17 +138,6 @@ const Dashboard = ({ user }) => {
   const chunkAssignees = user.role === 'lead'
     ? people.filter(p => p.id === user.personId || p.managerId === user.personId)
     : [];
-
-  const assigneeOptions = user.role === 'lead'
-    ? people.filter(p => p.id === user.personId || p.managerId === user.personId)
-    : null;
-
-  const leads = people.filter(p => p.role === 'lead');
-  const soloMembers = people.filter(p => p.role !== 'lead' && !p.managerId);
-
-  const handleAssignedProject = (project) => {
-    setProjects(prev => prev.map(p => p.id === project.id ? project : p));
-  };
 
   const navigate = (dir) => {
     setPeriodStart(prev => granularity === 'week' ? addWeeks(prev, dir * WEEK_COUNT) : addMonths(prev, dir * MONTH_COUNT));
@@ -340,39 +262,6 @@ const Dashboard = ({ user }) => {
         <div>
           <h1 className="text-2xl font-semibold text-gray-800">Dashboard</h1>
           <p className="text-sm text-gray-500 mt-0.5">Monitor team capacity and workload across upcoming weeks.</p>
-        </div>
-        <div className="flex items-center gap-3">
-          {isBoss ? (
-            <div ref={actionAreaRef} className="flex items-center gap-2">
-              <ActionDropdown
-                label="+ Create"
-                variant="secondary"
-                open={openMenu === 'create'}
-                onToggle={() => setOpenMenu(openMenu === 'create' ? null : 'create')}
-                items={[
-                  { label: 'Add Person', onClick: () => { setOpenMenu(null); setPersonModalOpen(true); } },
-                  { label: 'Add Project', onClick: () => { setOpenMenu(null); setProjectModalOpen(true); } }
-                ]}
-              />
-              <ActionDropdown
-                label="+ Assign"
-                variant="primary"
-                open={openMenu === 'assign'}
-                onToggle={() => setOpenMenu(openMenu === 'assign' ? null : 'assign')}
-                items={[
-                  { label: 'Assign Project to Lead', onClick: () => { setOpenMenu(null); setAssignProjectOpen(true); } },
-                  { label: 'Assign Task to Solo Member', onClick: () => { setOpenMenu(null); setTaskSoloMode(true); setTaskModalOpen(true); } }
-                ]}
-              />
-            </div>
-          ) : (
-            <>
-              <Button onClick={() => setTaskModalOpen(true)}>+ Add Task</Button>
-              {canManage && <Button variant="secondary" onClick={() => setAssignProjectOpen(true)}>+ Assign Project</Button>}
-              {canManage && <Button variant="secondary" onClick={() => setPersonModalOpen(true)}>+ Add Person</Button>}
-              {canManage && <Button variant="secondary" onClick={() => setProjectModalOpen(true)}>+ Add Project</Button>}
-            </>
-          )}
         </div>
       </div>
 
@@ -568,25 +457,6 @@ const Dashboard = ({ user }) => {
         </div>
       </Card>
 
-      <TaskFormModal
-        isOpen={taskModalOpen}
-        onClose={() => { setTaskModalOpen(false); setTaskSoloMode(false); }}
-        onCreated={handleCreatedTask}
-        people={people}
-        projects={projects}
-        currentMonday={toISO(todayMonday())}
-        assigneeLock={canManage ? null : user.personId}
-        isBoss={isBoss}
-        assigneeOptions={isBoss && taskSoloMode ? soloMembers : assigneeOptions}
-        assigneeOptionsLabel={isBoss && taskSoloMode ? 'Solo members' : undefined}
-      />
-      <AssignProjectModal
-        isOpen={assignProjectOpen}
-        onClose={() => setAssignProjectOpen(false)}
-        onAssigned={handleAssignedProject}
-        projects={projects}
-        leads={leads}
-      />
       <ChunkFormModal
         isOpen={chunkModalOpen}
         onClose={() => setChunkModalOpen(false)}
@@ -595,22 +465,6 @@ const Dashboard = ({ user }) => {
         people={chunkAssignees}
         currentMonday={toISO(todayMonday())}
       />
-      {canManage && (
-        <>
-          <PersonFormModal
-            isOpen={personModalOpen}
-            onClose={() => setPersonModalOpen(false)}
-            onCreated={handleCreatedPerson}
-            teams={teamNames}
-            people={people}
-          />
-          <ProjectFormModal
-            isOpen={projectModalOpen}
-            onClose={() => setProjectModalOpen(false)}
-            onCreated={handleCreatedProject}
-          />
-        </>
-      )}
     </div>
   );
 };
