@@ -152,6 +152,38 @@ const Dashboard = ({ user }) => {
     });
   };
 
+  const getTeamAggregation = (leadPerson, members) => {
+    const allPeople = [leadPerson, ...members];
+    const activePeople = allPeople.filter(p => p.status !== 'inactive');
+    if (activePeople.length === 0) {
+      return {
+        teamCapacity: 0,
+        teamAssigned: 0,
+        teamAvailable: 0,
+        teamOverloaded: false,
+        buckets: leadPerson.buckets.map(b => ({ ...b, assignedHours: 0, capacityHours: 0, utilization: 0, overloaded: false })),
+        activeCount: 0,
+        totalCount: allPeople.length
+      };
+    }
+    const teamCapacity = activePeople.reduce((sum, p) => sum + (p.weeklyCapacity || 0), 0);
+    const teamAssigned = activePeople.reduce((sum, p) => sum + (p.totalAssignedHours || 0), 0);
+    const teamAvailable = Math.max(0, teamCapacity - teamAssigned);
+    const teamOverloaded = teamAssigned > teamCapacity;
+    const buckets = leadPerson.buckets.map((leadBucket, i) => {
+      const bucketAssigned = activePeople.reduce((sum, p) => sum + (p.buckets[i]?.assignedHours || 0), 0);
+      const bucketCapacity = activePeople.reduce((sum, p) => sum + (p.buckets[i]?.capacityHours || 0), 0);
+      return {
+        key: leadBucket.key,
+        assignedHours: bucketAssigned,
+        capacityHours: bucketCapacity,
+        utilization: bucketCapacity > 0 ? Number((bucketAssigned / bucketCapacity).toFixed(3)) : 0,
+        overloaded: bucketAssigned > bucketCapacity
+      };
+    });
+    return { teamCapacity, teamAssigned, teamAvailable, teamOverloaded, buckets, activeCount: activePeople.length, totalCount: allPeople.length };
+  };
+
   const rangeLabel = granularity === 'week'
     ? `${formatWeekLabel(buckets[0])} – ${formatWeekLabel(buckets[buckets.length - 1])}, ${buckets[0].slice(0, 4)}`
     : `${formatMonthLabel(buckets[0])} – ${formatMonthLabel(buckets[buckets.length - 1])}`;
@@ -177,6 +209,54 @@ const Dashboard = ({ user }) => {
 
   const groups = taskGroups();
   const hierarchyRows = isBoss && report ? buildHierarchyRows(report.people) : [];
+
+  const renderTeamRow = (leadPerson, members) => {
+    const agg = getTeamAggregation(leadPerson, members);
+    return (
+      <tr
+        key={`team-${leadPerson.id}`}
+        className={`border-b border-gray-200 ${agg.teamOverloaded ? 'bg-red-50' : 'bg-gray-50'} font-semibold`}
+      >
+        <td className="p-2.5">
+          <div className="flex items-center gap-2">
+            <span className="w-6 inline-flex justify-center shrink-0">
+              <button
+                onClick={() => toggleLead(leadPerson.id)}
+                className="w-6 h-6 inline-flex items-center justify-center rounded hover:bg-gray-100 text-blue-600"
+                title="Expand members"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </button>
+            </span>
+            <span className="font-bold text-gray-900 whitespace-nowrap">{leadPerson.team || 'No Team'}</span>
+            <span className="text-xs font-medium bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">Team</span>
+            {agg.teamOverloaded && <span className="text-xs font-medium bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Overloaded</span>}
+          </div>
+          <div className="text-xs text-gray-500 ml-8 mt-0.5">Lead: {leadPerson.name}</div>
+        </td>
+        <td className="p-2.5 text-gray-600">{agg.activeCount} of {agg.totalCount} active</td>
+        <td className="p-2.5 text-right">{agg.teamCapacity}h</td>
+        {agg.buckets.map(bucket => (
+          <td key={bucket.key} className={`p-2 text-center border rounded m-0 ${cellStyle(bucket)}`}>
+            <span className="font-semibold">{bucket.assignedHours}h</span>
+            {granularity === 'week' && (
+              <span className="block text-[11px] opacity-70">of {bucket.capacityHours}h</span>
+            )}
+          </td>
+        ))}
+        <td className={`p-2.5 text-right font-bold ${agg.teamAssigned > agg.teamCapacity ? 'text-red-600' : ''}`}>
+          {agg.teamAssigned}h
+        </td>
+        <td className="p-2.5 text-center">
+          {agg.teamOverloaded
+            ? <span className="inline-block bg-red-600 text-white text-xs px-2 py-0.5 rounded-full">Overloaded</span>
+            : <span className="inline-block bg-green-600 text-white text-xs px-2 py-0.5 rounded-full">OK</span>}
+        </td>
+      </tr>
+    );
+  };
 
   const renderPersonRow = (person, { isLead = false, isMember = false, isLast = false, hasMembers = false, collapsed = false } = {}) => (
     <tr
@@ -344,7 +424,9 @@ const Dashboard = ({ user }) => {
                       const collapsed = collapsedLeads.has(row.person.id);
                       return (
                         <Fragment key={row.person.id}>
-                          {renderPersonRow(row.person, { isLead: true, hasMembers: row.members.length > 0, collapsed })}
+                          {collapsed
+                            ? renderTeamRow(row.person, row.members)
+                            : renderPersonRow(row.person, { isLead: true, hasMembers: row.members.length > 0, collapsed })}
                           {!collapsed && row.members.map((member, index) => renderPersonRow(member, { isMember: true, isLast: index === row.members.length - 1 }))}
                         </Fragment>
                       );
