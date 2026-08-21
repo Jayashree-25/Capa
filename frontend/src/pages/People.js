@@ -27,6 +27,7 @@ const People = () => {
   // Modals
   const [editPerson, setEditPerson] = useState(null);
   const [rolePerson, setRolePerson] = useState(null);
+  const [statusPerson, setStatusPerson] = useState(null);
 
   const closeMenu = useCallback(() => setOpenMenuId(null), []);
 
@@ -36,7 +37,7 @@ const People = () => {
       const btn = buttonRefs.current[personId];
       if (btn) {
         const rect = btn.getBoundingClientRect();
-        const menuHeight = 130;
+        const menuHeight = 170;
         const spaceBelow = window.innerHeight - rect.bottom;
         const openUpward = spaceBelow < menuHeight + 8;
         setMenuPos({
@@ -78,7 +79,7 @@ const People = () => {
   const filtered = people.filter(p => {
     if (roleFilter !== 'all' && p.role !== roleFilter) return false;
     if (teamFilter !== 'all' && p.team !== teamFilter) return false;
-    if (statusFilter !== 'all') return false; // all people are active for now
+    if (statusFilter !== 'all' && (p.status || 'active') !== statusFilter) return false;
     return true;
   });
 
@@ -133,6 +134,7 @@ const People = () => {
             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="h-9 px-2 rounded-md border border-gray-300 bg-white text-gray-700 focus:border-blue-500 focus:outline-none">
               <option value="all">All status</option>
               <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
             </select>
           </div>
         </div>
@@ -165,7 +167,11 @@ const People = () => {
                   <td className="p-2.5 text-gray-700">{person.team}</td>
                   <td className="p-2.5 text-right text-gray-700">{person.weeklyCapacity}h</td>
                   <td className="p-2.5 text-center">
-                    <span className="inline-block bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded-full">Active</span>
+                    {(person.status || 'active') === 'active' ? (
+                      <span className="inline-block bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded-full">Active</span>
+                    ) : (
+                      <span className="inline-block bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded-full">Inactive</span>
+                    )}
                   </td>
                   <td className="p-2.5 text-right">
                     <button
@@ -200,7 +206,7 @@ const People = () => {
         <div
           ref={menuRef}
           style={{ position: 'fixed', top: menuPos.top, left: menuPos.left, zIndex: 9999 }}
-          className="w-40 bg-white border border-gray-200 rounded-lg shadow-lg py-1"
+          className="w-44 bg-white border border-gray-200 rounded-lg shadow-lg py-1"
         >
           {(() => {
             const person = people.find(p => p.id === openMenuId);
@@ -228,6 +234,16 @@ const People = () => {
                     <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                   </svg>
                   Change role
+                </button>
+                <button
+                  onClick={() => { setStatusPerson(person); closeMenu(); }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition text-left"
+                >
+                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12 6 12 12 16 14" />
+                  </svg>
+                  Change status
                 </button>
                 <div className="border-t border-gray-100 my-1" />
                 <button
@@ -263,6 +279,15 @@ const People = () => {
           person={rolePerson}
           people={people}
           onUpdated={() => { setRolePerson(null); load(); }}
+        />
+      )}
+
+      {statusPerson && (
+        <ChangeStatusModal
+          isOpen={!!statusPerson}
+          onClose={() => setStatusPerson(null)}
+          person={statusPerson}
+          onUpdated={() => { setStatusPerson(null); load(); }}
         />
       )}
     </div>
@@ -334,12 +359,10 @@ const ChangeRoleModal = ({ isOpen, onClose, person, people, onUpdated }) => {
   const isCurrentlyLead = person.role === 'lead';
   const targetRole = isCurrentlyLead ? 'member' : 'lead';
 
-  // For lead→member: find other members in the same team who could become lead
   const potentialLeads = people.filter(p =>
     p.id !== person.id && p.team === person.team && p.role === 'member'
   );
 
-  // Check if this lead has reports
   const hasReports = people.some(p => p.managerId === person.id);
 
   const handleSubmit = async (e) => {
@@ -349,20 +372,17 @@ const ChangeRoleModal = ({ isOpen, onClose, person, people, onUpdated }) => {
 
     try {
       if (isCurrentlyLead && hasReports) {
-        // Need to reassign reports first
         if (!newLeadId) {
           setError('This lead has team members. Select a new lead before converting.');
           setSubmitting(false);
           return;
         }
-        // First reassign all reports to the new lead
         const reports = people.filter(p => p.managerId === person.id);
         for (const report of reports) {
           await updatePerson(report.id, { managerId: newLeadId });
         }
       }
 
-      // Now change the role
       await updatePerson(person.id, { role: targetRole });
       onUpdated();
     } catch (err) {
@@ -412,6 +432,62 @@ const ChangeRoleModal = ({ isOpen, onClose, person, people, onUpdated }) => {
             onClick={handleSubmit}
           >
             {submitting ? 'Saving…' : `Convert to ${targetRole}`}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+};
+
+// ---------- Change Status Modal ----------
+
+const ChangeStatusModal = ({ isOpen, onClose, person, onUpdated }) => {
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const currentStatus = person.status || 'active';
+  const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
+
+  const handleSubmit = async () => {
+    setSubmitting(true);
+    setError('');
+    try {
+      await updatePerson(person.id, { status: newStatus });
+      onUpdated();
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} ariaLabel="Change status">
+      <div className="space-y-4">
+        <h2 className="text-xl font-semibold text-gray-800">Change Status</h2>
+        <p className="text-sm text-gray-600">
+          Change <span className="font-semibold">{person.name}</span> from{' '}
+          <span className="font-semibold">{currentStatus === 'active' ? 'Active' : 'Inactive'}</span> to{' '}
+          <span className="font-semibold">{newStatus === 'active' ? 'Active' : 'Inactive'}</span>.
+        </p>
+
+        {newStatus === 'inactive' && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm px-4 py-3 rounded-md">
+            <p className="font-medium mb-1">Setting to Inactive</p>
+            <ul className="list-disc list-inside space-y-0.5 text-amber-700">
+              <li>The person will remain in the system with all historical data preserved.</li>
+              <li>Their tasks, projects, and account access will not be affected.</li>
+              <li>Their capacity will no longer be counted in team availability.</li>
+            </ul>
+          </div>
+        )}
+
+        {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-md">{error}</div>}
+
+        <div className="flex justify-end space-x-2 pt-2">
+          <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button type="button" disabled={submitting} onClick={handleSubmit}>
+            {submitting ? 'Saving…' : `Set to ${newStatus === 'active' ? 'Active' : 'Inactive'}`}
           </Button>
         </div>
       </div>
