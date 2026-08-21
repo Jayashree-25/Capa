@@ -190,6 +190,7 @@ router.put('/people/:id', requireRole('boss', 'lead'), async (req, res) => {
 
     const newRole = merged.role;
     const newManagerId = merged.managerId ?? null;
+    const newStatus = merged.status === 'inactive' ? 'inactive' : 'active';
 
     if (newManagerId === req.params.id) {
       return res.status(400).json({ error: 'A person cannot be their own manager.' });
@@ -211,7 +212,8 @@ router.put('/people/:id', requireRole('boss', 'lead'), async (req, res) => {
       team: merged.team.trim(),
       weeklyCapacity: merged.weeklyCapacity,
       managerId: newManagerId,
-      role: newRole
+      role: newRole,
+      status: newStatus
     };
     await saveData(data);
     res.json(data.people[index]);
