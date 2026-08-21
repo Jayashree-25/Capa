@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Spinner } from '../components/Spinner';
 import { Modal } from '../components/Modal';
 import { Button } from '../components/Button';
@@ -19,6 +20,41 @@ const Projects = () => {
   // Modal state
   const [addOpen, setAddOpen] = useState(false);
   const [editProject, setEditProject] = useState(null);
+  const [openMenuId, setOpenMenuId] = useState(null);
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
+  const buttonRefs = useRef({});
+  const menuRef = useRef(null);
+
+  const closeMenu = useCallback(() => setOpenMenuId(null), []);
+
+  const toggleMenu = useCallback((projectId) => {
+    setOpenMenuId(prev => {
+      if (prev === projectId) return null;
+      const btn = buttonRefs.current[projectId];
+      if (btn) {
+        const rect = btn.getBoundingClientRect();
+        const menuHeight = 88; // approximate height of 2-item menu
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const openUpward = spaceBelow < menuHeight + 8;
+        setMenuPos({
+          top: openUpward ? rect.top - menuHeight - 4 : rect.bottom + 4,
+          left: rect.right - 144 // 144px = w-36
+        });
+      }
+      return projectId;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!openMenuId) return;
+    const handleClickOutside = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        closeMenu();
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [openMenuId, closeMenu]);
 
   const load = () => {
     Promise.all([getProjects(), getPeople()])
@@ -90,17 +126,20 @@ const Projects = () => {
                   <td className="p-2.5 text-center">
                     <span className="inline-block bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded-full">Active</span>
                   </td>
-                  <td className="p-2.5 text-right space-x-2">
+                  <td className="p-2.5 text-right">
                     <button
-                      onClick={() => setEditProject(project)}
-                      className="text-gray-400 hover:text-blue-600"
-                      title="Edit project"
-                    >✎</button>
-                    <button
-                      onClick={() => handleDelete(project)}
-                      className="text-gray-400 hover:text-red-500"
-                      title="Delete project"
-                    >✕</button>
+                      ref={(el) => { buttonRefs.current[project.id] = el; }}
+                      onClick={() => toggleMenu(project.id)}
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-md border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition"
+                      aria-label="Project actions"
+                      title="Project actions"
+                    >
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="12" cy="5" r="1.5" />
+                        <circle cx="12" cy="12" r="1.5" />
+                        <circle cx="12" cy="19" r="1.5" />
+                      </svg>
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -137,6 +176,44 @@ const Projects = () => {
           }}
           eligibleOwners={eligibleOwners}
         />
+      )}
+
+      {openMenuId && createPortal(
+        <div
+          ref={menuRef}
+          style={{ position: 'fixed', top: menuPos.top, left: menuPos.left, zIndex: 9999 }}
+          className="w-36 bg-white border border-gray-200 rounded-lg shadow-lg py-1"
+        >
+          {(() => {
+            const project = projects.find(p => p.id === openMenuId);
+            if (!project) return null;
+            return (
+              <>
+                <button
+                  onClick={() => { setEditProject(project); closeMenu(); }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition text-left"
+                >
+                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                  Edit
+                </button>
+                <button
+                  onClick={() => { handleDelete(project); closeMenu(); }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition text-left"
+                >
+                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  </svg>
+                  Delete
+                </button>
+              </>
+            );
+          })()}
+        </div>,
+        document.body
       )}
     </div>
   );
