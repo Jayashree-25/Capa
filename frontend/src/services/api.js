@@ -26,6 +26,9 @@ api.interceptors.response.use(
 export const login = (data) => api.post('/auth/login', data);
 export const registerUser = (data) => api.post('/auth/register', data);
 export const getUsers = () => api.get('/auth/users');
+export const updateUser = (id, data) => api.patch(`/auth/users/${id}`, data);
+export const deleteUser = (id) => api.delete(`/auth/users/${id}`);
+export const resendSetupEmail = (id) => api.post(`/auth/users/${id}/resend-setup`);
 export const updateProfile = (data) => api.patch('/auth/profile', data);
 export const changePassword = (data) => api.patch('/auth/password', data);
 export const setPassword = (data) => api.post('/auth/set-password', data);
