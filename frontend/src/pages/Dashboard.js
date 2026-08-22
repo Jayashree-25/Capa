@@ -27,6 +27,12 @@ const PROJECT_STATUS = {
   completed: { label: 'Completed', bg: 'bg-blue-100', text: 'text-blue-800' }
 };
 
+const TASK_STATUS = {
+  todo: { label: 'Todo', bg: 'bg-gray-100', text: 'text-gray-700' },
+  in_progress: { label: 'In Progress', bg: 'bg-blue-50', text: 'text-blue-700' },
+  completed: { label: 'Completed', bg: 'bg-green-100', text: 'text-green-700' }
+};
+
 const TASK_DRAG_TYPE = 'application/x-capa-task';
 
 const getDraggedTaskId = (dataTransfer) => {
@@ -503,6 +509,10 @@ const Dashboard = ({ user }) => {
                             {isDelegatedParent
                               ? <span className="font-medium bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-full" title="Hours count toward its chunks">delegated</span>
                               : <span className="text-blue-600 font-semibold">{task.estimatedHours}h</span>}
+                            {(() => {
+                              const ts = TASK_STATUS[task.status || 'todo'] || TASK_STATUS.todo;
+                              return <span className={'px-1.5 py-0.5 rounded-full font-medium ' + ts.bg + ' ' + ts.text}>{ts.label}</span>;
+                            })()}
                             <span className="text-gray-400">{formatWeekLabel(task.week)}</span>
                           </div>
                         </div>
