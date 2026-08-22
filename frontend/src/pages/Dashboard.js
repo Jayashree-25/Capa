@@ -21,6 +21,12 @@ const cellStyle = (bucket) => {
   return 'bg-green-50 text-green-700 border-green-200';
 };
 
+const PROJECT_STATUS = {
+  active: { label: 'Active', bg: 'bg-green-100', text: 'text-green-800' },
+  on_hold: { label: 'On Hold', bg: 'bg-amber-100', text: 'text-amber-800' },
+  completed: { label: 'Completed', bg: 'bg-blue-100', text: 'text-blue-800' }
+};
+
 const TASK_DRAG_TYPE = 'application/x-capa-task';
 
 const getDraggedTaskId = (dataTransfer) => {
@@ -178,7 +184,9 @@ const Dashboard = ({ user }) => {
   const groups = taskGroups();
 
   const perPersonData = report ? report.people.map(p => calcPersonBuckets(p, tasks, buckets, granularity, projectFilter || undefined)) : [];
-  const projectHierarchy = isBoss ? buildProjectHierarchy(perPersonData, projects, tasks, buckets, granularity) : [];
+  const projectHierarchy = isBoss
+    ? buildProjectHierarchy(people, projects, tasks, buckets, granularity, teamFilter || null)
+    : [];
 
   const filteredProjectHierarchy = projectFilter
     ? projectHierarchy.filter(p => p.id === projectFilter)
@@ -309,7 +317,7 @@ const Dashboard = ({ user }) => {
                 {isBoss ? (
                   <>
                     <th className="text-left p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Project</th>
-                    <th className="text-left p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Teams</th>
+                    <th className="text-left p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">People</th>
                     <th className="text-right p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Capacity</th>
                   </>
                 ) : (
@@ -332,20 +340,7 @@ const Dashboard = ({ user }) => {
               {isBoss
                 ? filteredProjectHierarchy.map(project => {
                     const isCollapsed = collapsedProjects.has(project.id);
-                    const projectBuckets = buckets.map(key => {
-                      const assigned = project.teams.reduce((s, team) =>
-                        s + team.people.reduce((ps, p) => ps + (p.projectBuckets[key] || 0), 0), 0);
-                      const capacity = project.totalCapacity;
-                      const utilization = capacity > 0 ? assigned / capacity : 0;
-                      return {
-                        key,
-                        assignedHours: assigned,
-                        capacityHours: capacity,
-                        utilization: Number(utilization.toFixed(3)),
-                        overloaded: assigned > capacity
-                      };
-                    });
-                    const totalPeople = project.teams.reduce((s, t) => s + t.people.length, 0);
+                    const statusCfg = PROJECT_STATUS[project.status] || PROJECT_STATUS.active;
                     return (
                       <Fragment key={project.id}>
                         <tr
@@ -361,12 +356,13 @@ const Dashboard = ({ user }) => {
                                 <path d="M6 9l6 6 6-6" />
                               </svg>
                               <span className="font-bold text-gray-900 whitespace-nowrap">{project.name}</span>
+                              <span className={'text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0 ' + statusCfg.bg + ' ' + statusCfg.text}>{statusCfg.label}</span>
                               {project.overloaded && <span className="text-xs font-medium bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Overloaded</span>}
                             </div>
                           </td>
-                          <td className="p-2.5 text-sm text-gray-600">{project.teams.length} team{project.teams.length !== 1 ? 's' : ''} · {totalPeople} people</td>
+                          <td className="p-2.5 text-sm text-gray-600">{project.people.length} {project.people.length === 1 ? 'person' : 'people'}</td>
                           <td className="p-2.5 text-right font-semibold">{project.totalCapacity}h</td>
-                          {projectBuckets.map(bucket => (
+                          {project.bucketCells.map(bucket => (
                             <td key={bucket.key} className={`p-2 text-center border rounded m-0 ${cellStyle(bucket)}`}>
                               <span className="font-semibold">{bucket.assignedHours}h</span>
                               <span className="text-[11px] opacity-70"> / {bucket.capacityHours}h</span>
@@ -381,73 +377,50 @@ const Dashboard = ({ user }) => {
                               : <span className="inline-block bg-green-600 text-white text-xs px-2 py-0.5 rounded-full">OK</span>}
                           </td>
                         </tr>
-                        {!isCollapsed && project.teams.map(team => (
-                          <Fragment key={`${project.id}-${team.name}`}>
-                            <tr className="border-b border-gray-100">
-                              <td className="py-2 pl-10 pr-2.5" colSpan="3">
-                                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{team.name}</span>
-                                <span className="text-xs text-gray-400 ml-2">· {team.people.length} people · {team.capacity}h</span>
+                        {!isCollapsed && (project.people.length === 0 ? (
+                          <tr className="border-b border-gray-50">
+                            <td colSpan={5 + buckets.length} className="py-3 pl-10 pr-2.5 text-sm text-gray-400">No people assigned yet</td>
+                          </tr>
+                        ) : project.people.map(person => (
+                          <tr
+                            key={person.id}
+                            className={`border-b border-gray-50 ${person.overloaded ? 'bg-red-50/50' : ''}`}
+                            onDragOver={(e) => { e.preventDefault(); setDropTarget(person.id); }}
+                            onDragLeave={() => setDropTarget(prev => prev === person.id ? null : prev)}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              setDropTarget(null);
+                              const taskId = getDraggedTaskId(e.dataTransfer);
+                              if (taskId) handleReassign(taskId, person.id);
+                            }}
+                          >
+                            <td className="py-1.5 pl-10 pr-2.5">
+                              <div className="flex items-center gap-2">
+                                <span className={`text-sm whitespace-nowrap ${person.id === project.ownerId ? 'font-semibold text-gray-900' : 'font-medium text-gray-800'}`}>{person.name}</span>
+                                {person.displayRole === 'Lead'
+                                  ? <span className="text-[10px] font-medium bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-full">Lead</span>
+                                  : <span className="text-[10px] font-medium text-gray-400">Member</span>}
+                                {person.overloaded && <span className="text-[10px] font-medium bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full">Overloaded</span>}
+                              </div>
+                            </td>
+                            <td className="py-1.5 text-gray-400 text-xs">{person.team}</td>
+                            <td className="py-1.5 text-right text-sm">{person.weeklyCapacity}h</td>
+                            {person.buckets.map(bucket => (
+                              <td key={bucket.key} className={`py-1.5 px-2 text-center border rounded m-0 text-sm ${cellStyle(bucket)}`}>
+                                <span className="font-semibold">{bucket.assignedHours}h</span>
+                                <span className="text-[10px] opacity-60"> / {bucket.capacityHours}h</span>
                               </td>
-                              {buckets.map(key => {
-                                const teamBucketAssigned = team.people.reduce((s, p) => s + (p.projectBuckets[key] || 0), 0);
-                                return (
-                                  <td key={key} className="p-2 text-center text-xs text-gray-400">
-                                    {teamBucketAssigned}h
-                                  </td>
-                                );
-                              })}
-                              <td className="p-2.5 text-right text-xs text-gray-500">{team.assigned}h</td>
-                              <td className="p-2.5 text-center">
-                                {team.assigned > team.capacity
-                                  ? <span className="inline-block bg-red-100 text-red-600 text-[10px] px-1.5 py-0.5 rounded-full">Over</span>
-                                  : null}
-                              </td>
-                            </tr>
-                            {team.people.map(person => {
-                              const personOverloaded = person.totalAssignedHours > person.weeklyCapacity;
-                              return (
-                                <tr
-                                  key={person.id}
-                                  className={`border-b border-gray-50 ${personOverloaded ? 'bg-red-50/50' : ''}`}
-                                  onDragOver={(e) => { e.preventDefault(); setDropTarget(person.id); }}
-                                  onDragLeave={() => setDropTarget(prev => prev === person.id ? null : prev)}
-                                  onDrop={(e) => {
-                                    e.preventDefault();
-                                    setDropTarget(null);
-                                    const taskId = getDraggedTaskId(e.dataTransfer);
-                                    if (taskId) handleReassign(taskId, person.id);
-                                  }}
-                                >
-                                  <td className="py-1.5 pl-16 pr-2.5">
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-medium text-gray-800 text-sm">{person.name}</span>
-                                      {person.displayRole === 'Lead'
-                                        ? <span className="text-[10px] font-medium bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-full">Lead</span>
-                                        : <span className="text-[10px] text-gray-400">{person.displayRole}</span>}
-                                      {personOverloaded && <span className="text-[10px] font-medium bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full">Overloaded</span>}
-                                    </div>
-                                  </td>
-                                  <td className="py-1.5 text-gray-400 text-xs">{person.team}</td>
-                                  <td className="py-1.5 text-right text-sm">{person.weeklyCapacity}h</td>
-                                  {person.buckets.map(bucket => (
-                                    <td key={bucket.key} className={`py-1.5 px-2 text-center border rounded m-0 text-sm ${cellStyle(bucket)}`}>
-                                      <span className="font-semibold">{bucket.assignedHours}h</span>
-                                      <span className="text-[10px] opacity-60"> / {bucket.capacityHours}h</span>
-                                    </td>
-                                  ))}
-                                  <td className={`py-1.5 px-2.5 text-right text-sm font-semibold ${personOverloaded ? 'text-red-600' : ''}`}>
-                                    {person.totalAssignedHours}h
-                                  </td>
-                                  <td className="py-1.5 px-2.5 text-center">
-                                    {personOverloaded
-                                      ? <span className="inline-block bg-red-600 text-white text-[10px] px-1.5 py-0.5 rounded-full">Over</span>
-                                      : <span className="inline-block bg-green-600 text-white text-[10px] px-1.5 py-0.5 rounded-full">OK</span>}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </Fragment>
-                        ))}
+                            ))}
+                            <td className={`py-1.5 px-2.5 text-right text-sm font-semibold ${person.totalAssigned > 0 && person.overloaded ? 'text-red-600' : ''}`}>
+                              {person.totalAssigned}h
+                            </td>
+                            <td className="py-1.5 px-2.5 text-center">
+                              {person.overloaded
+                                ? <span className="inline-block bg-red-600 text-white text-[10px] px-1.5 py-0.5 rounded-full">Over</span>
+                                : <span className="inline-block bg-green-600 text-white text-[10px] px-1.5 py-0.5 rounded-full">OK</span>}
+                            </td>
+                          </tr>
+                        )))}
                       </Fragment>
                     );
                   })
