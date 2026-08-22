@@ -5,6 +5,7 @@ import Login from './pages/Login';
 import People from './pages/People';
 import Projects from './pages/Projects';
 import Users from './pages/Users';
+import TasksPage from './pages/Tasks';
 import Profile from './pages/Profile';
 import Shell from './components/Shell';
 import Placeholder from './pages/Placeholder';
@@ -13,7 +14,6 @@ import SetupAccount from './pages/SetupAccount';
 import { getUser, setUser as persistUser, clearAuth } from './services/auth';
 
 const PLACEHOLDER_PAGES = [
-  { path: '/tasks', title: 'Tasks' },
   { path: '/organization', title: 'Organization' }
 ];
 
@@ -49,6 +49,7 @@ function App() {
                 <RoleRoute user={user} roles={['boss', 'lead']} exact path="/people" render={() => <People />} />
                 <RoleRoute user={user} roles={['boss', 'lead']} exact path="/projects" render={() => <Projects />} />
                 <RoleRoute user={user} roles={['boss']} exact path="/users" render={() => <Users />} />
+                <RoleRoute user={user} roles={['boss', 'lead', 'engineer']} exact path="/tasks" render={() => <TasksPage user={user} />} />
                 {PLACEHOLDER_PAGES.map(page => (
                   <RoleRoute key={page.path} user={user} roles={['boss', 'lead']} exact path={page.path} render={() => <Placeholder title={page.title} />} />
                 ))}
