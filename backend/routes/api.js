@@ -276,11 +276,21 @@ router.get('/projects', async (req, res) => {
 
 router.post('/projects', requireRole('boss', 'lead'), async (req, res) => {
   try {
-    const { name, description, ownerId } = req.body || {};
+    const { name, description, ownerId, status } = req.body || {};
     if (!name || typeof name !== 'string' || name.trim() === '') {
       return res.status(400).json({ error: 'Project name is required and must be a non-empty string.' });
     }
+    const validStatuses = ['active', 'on_hold', 'completed'];
+    const projectStatus = status || 'active';
+    if (!validStatuses.includes(projectStatus)) {
+      return res.status(400).json({ error: 'Status must be active, on_hold, or completed.' });
+    }
     const data = await loadData();
+
+    // Name uniqueness
+    if (data.projects.some(p => p.name.toLowerCase() === name.trim().toLowerCase())) {
+      return res.status(400).json({ error: 'A project with this name already exists.' });
+    }
 
     // Validate owner if provided — must be a lead or a solo member (no manager)
     if (ownerId !== null && ownerId !== undefined) {
@@ -297,7 +307,8 @@ router.post('/projects', requireRole('boss', 'lead'), async (req, res) => {
       id: `pr-${Date.now()}`,
       name: name.trim(),
       description: (description || '').trim(),
-      ownerId: ownerId ?? null
+      ownerId: ownerId ?? null,
+      status: projectStatus
     };
     data.projects.push(newProject);
     await saveData(data);
@@ -317,10 +328,23 @@ router.post('/projects', requireRole('boss', 'lead'), async (req, res) => {
 
 router.put('/projects/:id', requireRole('boss', 'lead'), async (req, res) => {
   try {
-    const { name, description, ownerId } = req.body || {};
+    const { name, description, ownerId, status } = req.body || {};
+    const validStatuses = ['active', 'on_hold', 'completed'];
+    if (status !== undefined && !validStatuses.includes(status)) {
+      return res.status(400).json({ error: 'Status must be active, on_hold, or completed.' });
+    }
     const data = await loadData();
     const index = data.projects.findIndex(p => p.id === req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Project not found.' });
+
+    // Name uniqueness — allow keeping the same name
+    if (name !== undefined && name.trim() !== '') {
+      const trimmedName = name.trim();
+      const existing = data.projects.find(p => p.id !== req.params.id && p.name.toLowerCase() === trimmedName.toLowerCase());
+      if (existing) {
+        return res.status(400).json({ error: 'A project with this name already exists.' });
+      }
+    }
 
     if (ownerId !== null && ownerId !== undefined) {
       const owner = data.people.find(p => p.id === ownerId);
@@ -337,7 +361,8 @@ router.put('/projects/:id', requireRole('boss', 'lead'), async (req, res) => {
       ...existing,
       name: name !== undefined ? name.trim() : existing.name,
       description: description !== undefined ? (description || '').trim() : (existing.description || ''),
-      ownerId: ownerId !== undefined ? ownerId : existing.ownerId
+      ownerId: ownerId !== undefined ? ownerId : existing.ownerId,
+      status: status !== undefined ? status : (existing.status || 'active')
     };
     await saveData(data);
 
