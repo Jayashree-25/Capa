@@ -51,7 +51,16 @@ export const getDisplayRole = (person) => {
 
 export const isActive = (person) => person.status !== 'inactive';
 
-export const buildProjectHierarchy = (perPersonData, projects, tasks, buckets, granularity) => {
+const capacityForKey = (person, key, granularity) =>
+  person.weeklyCapacity * (granularity === 'week' ? 1 : mondaysInMonth(key));
+
+// PROJECT-FIRST hierarchy:
+// projects -> project owner -> owner's reports -> task assignees -> workload/capacity
+export const buildProjectHierarchy = (people, projects, tasks, buckets, granularity, teamFilter) => {
+  const activePeople = people.filter(isActive);
+  const personLookup = new Map(activePeople.map(p => [p.id, p]));
+
+  // Seed an entry for EVERY project — visibility never depends on tasks
   const projectMap = new Map();
   for (const p of projects) {
     projectMap.set(p.id, {
@@ -60,39 +69,41 @@ export const buildProjectHierarchy = (perPersonData, projects, tasks, buckets, g
       description: p.description,
       ownerId: p.ownerId,
       ownerName: p.ownerName,
-      peopleByTeam: new Map(),
-      soloPeople: []
+      status: p.status || 'active',
+      peopleById: new Map()
     });
   }
 
+  // 1+2. Owner first, then their reports if the owner is a lead
+  for (const [, proj] of projectMap) {
+    if (!proj.ownerId) continue;
+    const owner = personLookup.get(proj.ownerId);
+    if (!owner) continue;
+    proj.peopleById.set(owner.id, { person: owner, totalAssigned: 0, bucketHours: {} });
+    if (owner.role === 'lead') {
+      for (const r of activePeople) {
+        if (r.managerId === owner.id && !proj.peopleById.has(r.id)) {
+          proj.peopleById.set(r.id, { person: r, totalAssigned: 0, bucketHours: {} });
+        }
+      }
+    }
+  }
+
+  // 3. Task assignees on the project (delegation-aware: chunks count, delegated parents do not)
   const delegatedParentIds = new Set(tasks.filter(t => t.parentId).map(t => t.parentId));
-
-  const personLookup = new Map(perPersonData.map(p => [p.id, p]));
-
   for (const t of tasks) {
     if (delegatedParentIds.has(t.id)) continue;
     if (!t.assigneeId || !t.projectId) continue;
-    const person = personLookup.get(t.assigneeId);
-    if (!person || !isActive(person)) continue;
     const proj = projectMap.get(t.projectId);
     if (!proj) continue;
-
-    const taskBucket = granularity === 'week' ? t.week : (t.week ? t.week.slice(0, 7) : null);
-
-    const teamName = person.team || 'No Team';
-    if (!proj.peopleByTeam.has(teamName)) {
-      proj.peopleByTeam.set(teamName, new Map());
+    const person = personLookup.get(t.assigneeId);
+    if (!person) continue;
+    if (!proj.peopleById.has(person.id)) {
+      proj.peopleById.set(person.id, { person, totalAssigned: 0, bucketHours: {} });
     }
-    const teamPeople = proj.peopleByTeam.get(teamName);
-    if (!teamPeople.has(person.id)) {
-      teamPeople.set(person.id, {
-        person,
-        totalAssigned: 0,
-        bucketHours: {}
-      });
-    }
-    const entry = teamPeople.get(person.id);
+    const entry = proj.peopleById.get(person.id);
     entry.totalAssigned += t.estimatedHours;
+    const taskBucket = granularity === 'week' ? t.week : (t.week ? t.week.slice(0, 7) : null);
     if (taskBucket) {
       entry.bucketHours[taskBucket] = (entry.bucketHours[taskBucket] || 0) + t.estimatedHours;
     }
@@ -100,49 +111,75 @@ export const buildProjectHierarchy = (perPersonData, projects, tasks, buckets, g
 
   const result = [];
   for (const [, proj] of projectMap) {
-    const teams = [];
-    for (const [teamName, peopleMap] of proj.peopleByTeam) {
-      const people = [];
-      for (const [, entry] of peopleMap) {
-        people.push({
-          ...entry.person,
-          projectAssignedHours: entry.totalAssigned,
-          projectBuckets: entry.bucketHours,
-          displayRole: getDisplayRole(entry.person)
-        });
-      }
-      people.sort((a, b) => {
-        if (a.displayRole === 'Lead' && b.displayRole !== 'Lead') return -1;
-        if (a.displayRole !== 'Lead' && b.displayRole === 'Lead') return 1;
-        return a.name.localeCompare(b.name);
-      });
-      teams.push({
-        name: teamName,
-        people,
-        capacity: people.reduce((s, p) => s + p.weeklyCapacity, 0),
-        assigned: people.reduce((s, p) => s + p.projectAssignedHours, 0)
-      });
+    let entries = [...proj.peopleById.values()];
+
+    if (teamFilter) {
+      entries = entries.filter(e => e.person.team === teamFilter);
     }
-    teams.sort((a, b) => {
-      if (a.name === 'Solo') return 1;
-      if (b.name === 'Solo') return -1;
-      return a.name.localeCompare(b.name);
+
+    const isOwnerRow = (e) => e.person.id === proj.ownerId;
+    const isReportRow = (e) => !isOwnerRow(e) && !!e.person.managerId && e.person.managerId === proj.ownerId;
+    entries.sort((a, b) => {
+      const oa = isOwnerRow(a) ? 0 : (isReportRow(a) ? 1 : 2);
+      const ob = isOwnerRow(b) ? 0 : (isReportRow(b) ? 1 : 2);
+      if (oa !== ob) return oa - ob;
+      return a.person.name.localeCompare(b.person.name);
     });
 
-    const allProjectPeople = teams.flatMap(team => team.people);
-    const totalCapacity = allProjectPeople.reduce((s, p) => s + p.weeklyCapacity, 0);
-    const totalAssigned = allProjectPeople.reduce((s, p) => s + p.projectAssignedHours, 0);
-
-    if (allProjectPeople.length > 0) {
-      result.push({
-        ...proj,
-        teams,
-        totalCapacity,
-        totalAssigned,
-        overloaded: totalAssigned > totalCapacity,
-        utilization: totalCapacity > 0 ? Number((totalAssigned / totalCapacity).toFixed(3)) : 0
+    const peopleRows = entries.map(e => {
+      const personBuckets = buckets.map(key => {
+        const assignedHours = e.bucketHours[key] || 0;
+        const capacityHours = capacityForKey(e.person, key, granularity);
+        return {
+          key,
+          assignedHours,
+          capacityHours,
+          utilization: capacityHours > 0 ? Number((assignedHours / capacityHours).toFixed(3)) : 0,
+          overloaded: assignedHours > capacityHours
+        };
       });
-    }
+      return {
+        id: e.person.id,
+        name: e.person.name,
+        team: e.person.team,
+        role: e.person.role,
+        displayRole: e.person.role === 'lead' ? 'Lead' : 'Member',
+        weeklyCapacity: e.person.weeklyCapacity,
+        totalAssigned: e.totalAssigned,
+        buckets: personBuckets,
+        overloaded: personBuckets.some(b => b.overloaded)
+      };
+    });
+
+    const bucketCells = buckets.map(key => {
+      const assignedHours = peopleRows.reduce((s, p) => s + (p.buckets.find(b => b.key === key)?.assignedHours || 0), 0);
+      const capacityHours = peopleRows.reduce((s, p) => s + (p.buckets.find(b => b.key === key)?.capacityHours || 0), 0);
+      return {
+        key,
+        assignedHours,
+        capacityHours,
+        utilization: capacityHours > 0 ? Number((assignedHours / capacityHours).toFixed(3)) : 0,
+        overloaded: assignedHours > capacityHours
+      };
+    });
+
+    const totalCapacity = bucketCells.reduce((s, b) => s + b.capacityHours, 0);
+    const totalAssigned = bucketCells.reduce((s, b) => s + b.assignedHours, 0);
+
+    result.push({
+      id: proj.id,
+      name: proj.name,
+      description: proj.description,
+      status: proj.status,
+      ownerId: proj.ownerId,
+      ownerName: proj.ownerName,
+      people: peopleRows,
+      bucketCells,
+      totalCapacity,
+      totalAssigned,
+      overloaded: totalAssigned > totalCapacity,
+      utilization: totalCapacity > 0 ? Number((totalAssigned / totalCapacity).toFixed(3)) : 0
+    });
   }
 
   result.sort((a, b) => a.name.localeCompare(b.name));
