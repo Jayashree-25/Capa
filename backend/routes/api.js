@@ -116,6 +116,14 @@ const validateTaskInput = (body, data) => {
   return null;
 };
 
+// Task status workflow: Todo -> In Progress -> Completed
+const TASK_STATUSES = ['todo', 'in_progress', 'completed'];
+const statusIssue = (status) => {
+  if (status === undefined || status === null) return null;
+  if (!TASK_STATUSES.includes(status)) return 'Status must be todo, in_progress, or completed.';
+  return null;
+};
+
 // Boss delegation rule: a boss may only assign tasks to a lead or a solo member
 // (a member who does not report to a lead). Members under a lead are off-limits.
 const delegationError = (role, assigneeId, people) => {
@@ -410,7 +418,11 @@ router.get('/tasks', async (req, res) => {
       if (req.user.role === 'engineer') {
         tasks = tasks.filter(t => t.assigneeId === req.user.personId);
       } else {
-        tasks = tasks.filter(t => !t.assigneeId || visible.includes(t.assigneeId));
+        // Leads see their subtree's tasks plus unassigned tasks they created themselves
+        tasks = tasks.filter(t =>
+          (t.assigneeId && visible.includes(t.assigneeId)) ||
+          (!t.assigneeId && t.createdBy === req.user.personId)
+        );
       }
     }
     const enriched = tasks.map(t => ({
@@ -425,7 +437,7 @@ router.get('/tasks', async (req, res) => {
   }
 });
 
-router.post('/tasks', async (req, res) => {
+router.post('/tasks', requireRole('boss', 'lead'), async (req, res) => {
   try {
     const data = await loadData();
     const { title, projectId, assigneeId, estimatedHours, week, parentId } = req.body;
@@ -452,14 +464,19 @@ router.post('/tasks', async (req, res) => {
       }
       resolvedProjectId = parent.projectId;
       chunkParentId = parentId;
+    } else if (req.user.role === 'lead' && assigneeId !== undefined && assigneeId !== null) {
+      // Leads can only create top-level tasks inside their management scope
+      const visible = await getVisiblePersonIds(req.user);
+      if (!visible.includes(assigneeId)) {
+        return res.status(403).json({ error: 'A lead can only assign tasks to themselves or their team.' });
+      }
     }
+
+    const statusError = statusIssue(req.body.status);
+    if (statusError) return res.status(400).json({ error: statusError });
 
     const error = validateTaskInput({ ...req.body, projectId: resolvedProjectId }, data);
     if (error) return res.status(400).json({ error });
-
-    if (req.user.role === 'engineer' && assigneeId !== req.user.personId) {
-      return res.status(403).json({ error: 'Engineers can only assign tasks to themselves.' });
-    }
 
     const delegationErrorMsg = delegationError(req.user.role, assigneeId, data.people);
     if (delegationErrorMsg) {
@@ -473,11 +490,14 @@ router.post('/tasks', async (req, res) => {
       assigneeId: assigneeId === undefined ? null : assigneeId,
       estimatedHours,
       week: toISODate(parseWeek(week)),
-      parentId: chunkParentId
+      parentId: chunkParentId,
+      status: 'todo',
+      createdBy: req.user.personId
     };
     data.tasks.push(newTask);
     await saveData(data);
-    res.status(201).json(newTask);
+    const creator = data.people.find(p => p.id === req.user.personId);
+    res.status(201).json({ ...newTask, createdByName: creator ? creator.name : null });
   } catch (err) {
     res.status(500).json({ error: `Failed to add task: ${err.message}` });
   }
@@ -492,14 +512,42 @@ router.put('/tasks/:id', async (req, res) => {
     if (req.body.parentId !== undefined) {
       return res.status(400).json({ error: 'A task\'s parent cannot be changed.' });
     }
+    delete req.body.createdBy;
 
     const existing = data.tasks[index];
+
+    const statusError = statusIssue(req.body.status);
+    if (statusError) return res.status(400).json({ error: statusError });
+
+    // Members may only update the status of their own tasks
     if (req.user.role === 'engineer') {
       if (existing.assigneeId !== req.user.personId) {
-        return res.status(403).json({ error: 'Engineers can only update their own tasks.' });
+        return res.status(403).json({ error: 'Members can only update their own tasks.' });
       }
-      if (req.body.assigneeId !== undefined && req.body.assigneeId !== req.user.personId) {
-        return res.status(403).json({ error: 'Engineers can only keep tasks assigned to themselves.' });
+      const attempted = Object.keys(req.body).filter(k => k !== 'status');
+      if (attempted.length > 0 || req.body.assigneeId !== undefined) {
+        return res.status(403).json({ error: 'Members can only update the status of their tasks.' });
+      }
+      if (!req.body.status) {
+        return res.status(400).json({ error: 'Nothing to update. Members can only change task status.' });
+      }
+      const updated = { ...existing, status: req.body.status };
+      data.tasks[index] = updated;
+      await saveData(data);
+      const creator = data.people.find(p => p.id === updated.createdBy);
+      res.json({ ...updated, createdByName: creator ? creator.name : null });
+      return;
+    }
+
+    // Leads may only manage tasks within their management scope:
+    // their subtree's tasks, chunks of parents assigned to them, or unassigned tasks they created
+    if (req.user.role === 'lead' && !existing.parentId) {
+      const visible = await getVisiblePersonIds(req.user);
+      const inScope =
+        (existing.assigneeId && visible.includes(existing.assigneeId)) ||
+        (!existing.assigneeId && existing.createdBy === req.user.personId);
+      if (!inScope) {
+        return res.status(403).json({ error: 'You can only manage tasks within your team.' });
       }
     }
 
@@ -514,6 +562,12 @@ router.put('/tasks/:id', async (req, res) => {
           return res.status(chunkIssue.status).json({ error: chunkIssue.error });
         }
       } else {
+        if (req.user.role === 'lead' && req.body.assigneeId !== null) {
+          const visible = await getVisiblePersonIds(req.user);
+          if (!visible.includes(req.body.assigneeId)) {
+            return res.status(403).json({ error: 'A lead can only reassign tasks to themselves or their team.' });
+          }
+        }
         const delegationErrorMsg = delegationError(req.user.role, req.body.assigneeId, data.people);
         if (delegationErrorMsg) {
           return res.status(403).json({ error: delegationErrorMsg });
@@ -529,12 +583,14 @@ router.put('/tasks/:id', async (req, res) => {
       }
       merged.week = toISODate(parsed);
     }
+    if (merged.status === undefined || merged.status === null) merged.status = existing.status || 'todo';
     const error = validateTaskInput(merged, data);
     if (error) return res.status(400).json({ error });
 
     data.tasks[index] = merged;
     await saveData(data);
-    res.json(merged);
+    const creator = data.people.find(p => p.id === merged.createdBy);
+    res.json({ ...merged, createdByName: creator ? creator.name : null });
   } catch (err) {
     res.status(500).json({ error: `Failed to update task: ${err.message}` });
   }
@@ -545,6 +601,26 @@ router.delete('/tasks/:id', requireRole('boss', 'lead'), async (req, res) => {
     const data = await loadData();
     const index = data.tasks.findIndex(t => t.id === req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Task not found.' });
+
+    const existing = data.tasks[index];
+
+    // Leads may only delete tasks within their management scope
+    if (req.user.role === 'lead') {
+      if (existing.parentId) {
+        const parent = data.tasks.find(t => t.id === existing.parentId);
+        if (!parent || parent.assigneeId !== req.user.personId) {
+          return res.status(403).json({ error: 'You can only manage tasks within your team.' });
+        }
+      } else {
+        const visible = await getVisiblePersonIds(req.user);
+        const inScope =
+          (existing.assigneeId && visible.includes(existing.assigneeId)) ||
+          (!existing.assigneeId && existing.createdBy === req.user.personId);
+        if (!inScope) {
+          return res.status(403).json({ error: 'You can only manage tasks within your team.' });
+        }
+      }
+    }
 
     if (data.tasks.some(t => t.parentId === req.params.id)) {
       return res.status(409).json({ error: 'This task has delegated chunks. Delete those chunks first.' });
