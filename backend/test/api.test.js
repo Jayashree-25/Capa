@@ -455,10 +455,18 @@ test('scoped views: lead sees their subtree, engineer sees only themselves', asy
   assert.strictEqual((await engReq(`/people/${mgr.id}`, { method: 'DELETE' })).status, 403);
   assert.strictEqual((await engReq('/projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Hacked' }) })).status, 403);
 
-  const ownTask = await engReq('/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'Own', projectId: 'pr-1', assigneeId: empA.id, estimatedHours: 2, week: '2026-08-10' }) });
-  assert.strictEqual(ownTask.status, 201);
+  // Members cannot create tasks (boss/lead only) — neither for themselves nor others
+  assert.strictEqual((await engReq('/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'Own', projectId: 'pr-1', assigneeId: empA.id, estimatedHours: 2, week: '2026-08-10' }) })).status, 403);
   assert.strictEqual((await engReq('/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'Other', projectId: 'pr-1', assigneeId: empB.id, estimatedHours: 2, week: '2026-08-10' }) })).status, 403);
   assert.strictEqual((await engReq(`/tasks/${empBtask.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assigneeId: empB.id }) })).status, 403);
+
+  // Members can update ONLY the status of their own tasks
+  const engOwned = (await (await engReq('/tasks')).json()).find(t => t.title === 'EmpA task');
+  const statusRes = await engReq(`/tasks/${engOwned.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'in_progress' }) });
+  assert.strictEqual(statusRes.status, 200);
+  assert.strictEqual((await statusRes.json()).status, 'in_progress');
+  assert.strictEqual((await engReq(`/tasks/${engOwned.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'Hacked title' }) })).status, 403);
+  assert.strictEqual((await engReq(`/tasks/${engOwned.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'bogus' }) })).status, 400);
 });
 
 // ---------- Org hierarchy ----------
