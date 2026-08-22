@@ -9,6 +9,7 @@ import Profile from './pages/Profile';
 import Shell from './components/Shell';
 import Placeholder from './pages/Placeholder';
 import NotFound from './pages/NotFound';
+import SetupAccount from './pages/SetupAccount';
 import { getUser, setUser as persistUser, clearAuth } from './services/auth';
 
 const PLACEHOLDER_PAGES = [
@@ -38,6 +39,7 @@ function App() {
     <Router>
       <Switch>
         <Route exact path="/login" render={() => (user ? <Redirect to="/dashboard" /> : <Login onLogin={handleLogin} />)} />
+        <Route exact path="/setup-account" render={() => <SetupAccount />} />
         <Route path="/" render={() =>
           user ? (
             <Shell user={user} onLogout={handleLogout}>
