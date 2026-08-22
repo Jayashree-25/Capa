@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '../components/Button';
 import { Spinner } from '../components/Spinner';
 import { login, setPassword } from '../services/api';
@@ -8,6 +8,9 @@ const inputClass =
   'w-full h-11 px-3.5 rounded-md border border-gray-300 bg-white text-gray-900 placeholder-gray-400 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none transition';
 
 const Login = ({ onLogin }) => {
+  const isMounted = useRef(true);
+  useEffect(() => { return () => { isMounted.current = false; }; }, []);
+
   const [email, setEmail] = useState('');
   const [password, setPassword_] = useState('');
   const [error, setError] = useState('');
@@ -41,7 +44,7 @@ const Login = ({ onLogin }) => {
     } catch (err) {
       setError('Unable to sign in. Please check your email and password and try again.');
     } finally {
-      setSubmitting(false);
+      if (isMounted.current) setSubmitting(false);
     }
   };
 
@@ -65,7 +68,7 @@ const Login = ({ onLogin }) => {
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to set password. Please try again.');
     } finally {
-      setSubmitting(false);
+      if (isMounted.current) setSubmitting(false);
     }
   };
 
