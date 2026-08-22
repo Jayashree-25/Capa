@@ -1,8 +1,9 @@
-const express = require('express');
+﻿const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { getPool } = require('../lib/db');
 const { requireAuth, requireRole, getJwtSecret } = require('../middleware/auth');
+const { sendSetupEmail } = require('../lib/email');
 
 const router = express.Router();
 
@@ -40,11 +41,11 @@ const findUserById = async (id) => {
   return rows[0] || null;
 };
 
-// POST /api/auth/register — create a user + optional person (boss only)
+// POST /api/auth/register â€” create a user + optional person (boss only)
 router.post('/register', requireAuth, requireRole('boss'), async (req, res) => {
   try {
     const { email, password, role = 'engineer', personId = null,
-            personName, personTeam, personWeeklyCapacity } = req.body || {};
+            personName, personTeam, personWeeklyCapacity, managerId } = req.body || {};
 
     if (!email || typeof email !== 'string' || !EMAIL_RE.test(email.trim())) {
       return res.status(400).json({ error: 'A valid email is required.' });
@@ -96,10 +97,28 @@ router.post('/register', requireAuth, requireRole('boss'), async (req, res) => {
         return res.status(400).json({ error: 'Weekly capacity must be a positive number (max 168).' });
       }
       const personRole = role === 'lead' ? 'lead' : 'member';
+
+      // Validate managerId if provided
+      let resolvedManagerId = managerId || null;
+      if (personRole === 'lead') {
+        // Leads report to Boss â€” no manager allowed
+        resolvedManagerId = null;
+      } else if (resolvedManagerId) {
+        // Members must report to an existing lead
+        const mgr = await pool.query('SELECT id, role FROM people WHERE id = $1', [resolvedManagerId]);
+        if (mgr.rowCount === 0) {
+          return res.status(400).json({ error: 'Reports-to person does not exist.' });
+        }
+        if (mgr.rows[0].role !== 'lead') {
+          return res.status(400).json({ error: 'A member can only report to a lead.' });
+        }
+      }
+      // else: solo member (no manager) â€” valid
+
       const personIdNew = `p-${Date.now()}`;
       await pool.query(
-        'INSERT INTO people (id, name, team, weekly_capacity, role) VALUES ($1, $2, $3, $4, $5)',
-        [personIdNew, personName.trim(), personTeam.trim(), capacity, personRole]
+        'INSERT INTO people (id, name, team, weekly_capacity, role, manager_id) VALUES ($1, $2, $3, $4, $5, $6)',
+        [personIdNew, personName.trim(), personTeam.trim(), capacity, personRole, resolvedManagerId]
       );
       finalPersonId = personIdNew;
       finalRole = role === 'lead' ? 'lead' : 'engineer';
@@ -113,7 +132,7 @@ router.post('/register', requireAuth, requireRole('boss'), async (req, res) => {
     if (password && typeof password === 'string' && password.length >= 8) {
       passwordHash = await bcrypt.hash(password, 10);
     } else {
-      // No password provided — account needs password setup on first login
+      // No password provided â€” account needs password setup on first login
       passwordHash = await bcrypt.hash(`__pending_${id}_${Date.now()}`, 10);
       passwordSet = false;
     }
@@ -122,13 +141,26 @@ router.post('/register', requireAuth, requireRole('boss'), async (req, res) => {
       'INSERT INTO users (id, email, password_hash, role, person_id, password_set) VALUES ($1, $2, $3, $4, $5, $6)',
       [id, normalizedEmail, passwordHash, finalRole, finalPersonId, passwordSet]
     );
+
+    // Generate setup token and send email
+    if (!passwordSet) {
+      const setupToken = jwt.sign(
+        { sub: id, email: normalizedEmail, purpose: 'password-setup' },
+        getJwtSecret(),
+        { expiresIn: '72h' }
+      );
+      const personDisplayName = (req.body.personName || '').trim() || normalizedEmail;
+      sendSetupEmail(normalizedEmail, personDisplayName, setupToken)
+        .catch(err => console.error('Failed to send setup email:', err.message));
+    }
+
     res.status(201).json(toPublicUser(await findUserById(id)));
   } catch (err) {
     res.status(500).json({ error: `Failed to create user: ${err.message}` });
   }
 });
 
-// POST /api/auth/login — public, returns a token
+// POST /api/auth/login â€” public, returns a token
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body || {};
@@ -160,7 +192,7 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// GET /api/auth/me — current user (any authenticated user)
+// GET /api/auth/me â€” current user (any authenticated user)
 router.get('/me', requireAuth, async (req, res) => {
   try {
     const user = await findUserById(req.user.sub);
@@ -171,7 +203,7 @@ router.get('/me', requireAuth, async (req, res) => {
   }
 });
 
-// PATCH /api/auth/profile — update the authenticated user's own profile (name/email only)
+// PATCH /api/auth/profile â€” update the authenticated user's own profile (name/email only)
 router.patch('/profile', requireAuth, async (req, res) => {
   try {
     const body = req.body || {};
@@ -220,7 +252,7 @@ router.patch('/profile', requireAuth, async (req, res) => {
   }
 });
 
-// PATCH /api/auth/password — change the authenticated user's own password
+// PATCH /api/auth/password â€” change the authenticated user's own password
 router.patch('/password', requireAuth, async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body || {};
@@ -249,7 +281,7 @@ router.patch('/password', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/auth/set-password — first-time password setup (requires setupToken from login)
+// POST /api/auth/set-password â€” first-time password setup (requires setupToken from login)
 router.post('/set-password', async (req, res) => {
   try {
     const { setupToken, newPassword } = req.body || {};
@@ -289,7 +321,7 @@ router.post('/set-password', async (req, res) => {
   }
 });
 
-// GET /api/auth/users — list users (boss only)
+// GET /api/auth/users â€” list users (boss only)
 router.get('/users', requireAuth, requireRole('boss'), async (req, res) => {
   try {
     const { rows } = await getPool().query(`${USER_SELECT} ORDER BY u.email`);
@@ -299,4 +331,162 @@ router.get('/users', requireAuth, requireRole('boss'), async (req, res) => {
   }
 });
 
+// PATCH /api/auth/users/:id — update user + linked person (boss only)
+router.patch('/users/:id', requireAuth, requireRole('boss'), async (req, res) => {
+  try {
+    const { email, role, name, team, weeklyCapacity, managerId } = req.body || {};
+    const pool = getPool();
+
+    const { rows: userRows } = await pool.query(`${USER_SELECT} WHERE u.id = $1`, [req.params.id]);
+    if (userRows.length === 0) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+    const existing = userRows[0];
+
+    if (req.params.id === req.user.sub && role && role !== existing.role) {
+      return res.status(400).json({ error: 'You cannot change your own role.' });
+    }
+
+    let newEmail = existing.email;
+    if (email !== undefined) {
+      if (typeof email !== 'string' || !EMAIL_RE.test(email.trim())) {
+        return res.status(400).json({ error: 'A valid email is required.' });
+      }
+      newEmail = email.trim().toLowerCase();
+      if (newEmail !== existing.email) {
+        const dup = await pool.query('SELECT 1 FROM users WHERE lower(email) = $1 AND id <> $2', [newEmail, req.params.id]);
+        if (dup.rowCount > 0) {
+          return res.status(409).json({ error: 'A user with this email already exists.' });
+        }
+      }
+    }
+
+    let newRole = existing.role;
+    if (role !== undefined) {
+      if (!ROLES.includes(role)) {
+        return res.status(400).json({ error: `Role must be one of: ${ROLES.join(', ')}.` });
+      }
+      newRole = role;
+    }
+
+    await pool.query('UPDATE users SET email = $1, role = $2 WHERE id = $3', [newEmail, newRole, req.params.id]);
+
+    if (existing.person_id && (name !== undefined || team !== undefined || weeklyCapacity !== undefined || managerId !== undefined)) {
+      const { rows: personRows } = await pool.query('SELECT * FROM people WHERE id = $1', [existing.person_id]);
+      if (personRows.length > 0) {
+        const person = personRows[0];
+        const pName = name !== undefined ? name.trim() : person.name;
+        const pTeam = team !== undefined ? team.trim() : person.team;
+        const pCapacity = weeklyCapacity !== undefined ? weeklyCapacity : person.weekly_capacity;
+        const pRole = newRole === 'lead' ? 'lead' : 'member';
+
+        if (typeof pCapacity !== 'number' || !Number.isFinite(pCapacity) || pCapacity <= 0 || pCapacity > 168) {
+          return res.status(400).json({ error: 'Weekly capacity must be a positive number (max 168).' });
+        }
+
+        if (pRole === 'lead') {
+          await pool.query(
+            'UPDATE people SET name = $1, team = $2, weekly_capacity = $3, role = $4, manager_id = NULL WHERE id = $5',
+            [pName, pTeam, pCapacity, pRole, existing.person_id]
+          );
+        } else if (managerId !== undefined) {
+          const resolvedManagerId = managerId || null;
+          if (resolvedManagerId) {
+            const mgr = await pool.query('SELECT id, role FROM people WHERE id = $1', [resolvedManagerId]);
+            if (mgr.rowCount === 0) {
+              return res.status(400).json({ error: 'Reports-to person does not exist.' });
+            }
+            if (mgr.rows[0].role !== 'lead') {
+              return res.status(400).json({ error: 'A member can only report to a lead.' });
+            }
+          }
+          await pool.query(
+            'UPDATE people SET name = $1, team = $2, weekly_capacity = $3, role = $4, manager_id = $5 WHERE id = $6',
+            [pName, pTeam, pCapacity, pRole, resolvedManagerId, existing.person_id]
+          );
+        } else {
+          await pool.query(
+            'UPDATE people SET name = $1, team = $2, weekly_capacity = $3, role = $4 WHERE id = $5',
+            [pName, pTeam, pCapacity, pRole, existing.person_id]
+          );
+        }
+      }
+    }
+
+    const updated = await findUserById(req.params.id);
+    res.json(toPublicUser(updated));
+  } catch (err) {
+    res.status(500).json({ error: `Failed to update user: ${err.message}` });
+  }
+});
+
+// DELETE /api/auth/users/:id — delete user + linked person (boss only)
+router.delete('/users/:id', requireAuth, requireRole('boss'), async (req, res) => {
+  try {
+    const pool = getPool();
+
+    if (req.params.id === req.user.sub) {
+      return res.status(400).json({ error: 'You cannot delete your own account.' });
+    }
+
+    const { rows: userRows } = await pool.query('SELECT id, person_id FROM users WHERE id = $1', [req.params.id]);
+    if (userRows.length === 0) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+    const user = userRows[0];
+
+    if (user.person_id) {
+      const tasks = await pool.query('SELECT 1 FROM tasks WHERE assignee_id = $1 LIMIT 1', [user.person_id]);
+      if (tasks.rowCount > 0) {
+        return res.status(409).json({ error: 'Cannot delete: tasks are still assigned to this person. Reassign or delete those tasks first.' });
+      }
+      const reports = await pool.query('SELECT 1 FROM people WHERE manager_id = $1 LIMIT 1', [user.person_id]);
+      if (reports.rowCount > 0) {
+        return res.status(409).json({ error: 'Cannot delete: people still report to this person. Reassign them to another lead first.' });
+      }
+    }
+
+    await pool.query('DELETE FROM users WHERE id = $1', [req.params.id]);
+    if (user.person_id) {
+      await pool.query('DELETE FROM people WHERE id = $1', [user.person_id]);
+    }
+
+    res.json({ message: 'Account deleted successfully.' });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to delete user: ${err.message}` });
+  }
+});
+
+// POST /api/auth/users/:id/resend-setup — resend setup email (boss only)
+router.post('/users/:id/resend-setup', requireAuth, requireRole('boss'), async (req, res) => {
+  try {
+    const pool = getPool();
+
+    const { rows } = await pool.query('SELECT id, email, password_set FROM users WHERE id = $1', [req.params.id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+    const user = rows[0];
+
+    if (user.password_set) {
+      return res.status(400).json({ error: 'This account is already active. No setup email needed.' });
+    }
+
+    const setupToken = jwt.sign(
+      { sub: user.id, email: user.email, purpose: 'password-setup' },
+      getJwtSecret(),
+      { expiresIn: '72h' }
+    );
+
+    const personName = user.email;
+    await sendSetupEmail(user.email, personName, setupToken);
+
+    res.json({ message: `Setup email resent to ${user.email}.` });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to resend setup email: ${err.message}` });
+  }
+});
+
+
 module.exports = router;
+
