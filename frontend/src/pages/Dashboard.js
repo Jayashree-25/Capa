@@ -394,16 +394,16 @@ const Dashboard = ({ user }) => {
                               if (taskId) handleReassign(taskId, person.id);
                             }}
                           >
-                            <td className="py-1.5 pl-10 pr-2.5">
+                            <td className="py-1.5 pr-2.5 text-gray-300 text-sm">↳</td>
+                            <td className="py-1.5 pr-2.5">
                               <div className="flex items-center gap-2">
-                                <span className={`text-sm whitespace-nowrap ${person.id === project.ownerId ? 'font-semibold text-gray-900' : 'font-medium text-gray-800'}`}>{person.name}</span>
+                                <span className="text-sm font-medium text-gray-800 whitespace-nowrap">{person.name}</span>
                                 {person.displayRole === 'Lead'
                                   ? <span className="text-[10px] font-medium bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-full">Lead</span>
                                   : <span className="text-[10px] font-medium text-gray-400">Member</span>}
                                 {person.overloaded && <span className="text-[10px] font-medium bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full">Overloaded</span>}
                               </div>
                             </td>
-                            <td className="py-1.5 text-gray-400 text-xs">{person.team}</td>
                             <td className="py-1.5 text-right text-sm">{person.weeklyCapacity}h</td>
                             {person.buckets.map(bucket => (
                               <td key={bucket.key} className={`py-1.5 px-2 text-center border rounded m-0 text-sm ${cellStyle(bucket)}`}>
