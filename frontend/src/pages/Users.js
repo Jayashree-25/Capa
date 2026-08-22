@@ -9,6 +9,8 @@ import { getPeople, registerUser, getUsers, updateUser, deleteUser as deleteUser
 const inputClass =
   'w-full h-11 px-3.5 rounded-md border border-gray-300 bg-white text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none transition';
 
+const USERS_PER_PAGE = 10;
+
 const Users = () => {
   const [people, setPeople] = useState([]);
   const [users, setUsers] = useState([]);
@@ -16,6 +18,8 @@ const Users = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const [currentPage, setCurrentPage] = useState(1);
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -51,6 +55,12 @@ const Users = () => {
   }, [people]);
 
   const resolvedTeam = team === '__new' ? newTeam.trim() : team;
+
+  const totalPages = Math.max(1, Math.ceil(users.length / USERS_PER_PAGE));
+  const paginatedUsers = users.slice(
+    (currentPage - 1) * USERS_PER_PAGE,
+    currentPage * USERS_PER_PAGE
+  );
 
   const availableLeads = useMemo(() => {
     return people.filter(p => {
@@ -101,6 +111,7 @@ const Users = () => {
       }
       await registerUser(payload);
       resetForm();
+      setCurrentPage(1);
       setSuccess('Team member added and login created for ' + email.trim().toLowerCase() + '. They will set their password on first sign-in.');
       refresh();
     } catch (err) {
@@ -326,7 +337,7 @@ const Users = () => {
               </tr>
             </thead>
             <tbody>
-              {users.map(u => (
+              {paginatedUsers.map(u => (
                 <tr key={u.id} className="border-b border-gray-100">
                   <td className="p-2.5 text-gray-800">{u.email}</td>
                   <td className="p-2.5 text-gray-600">{u.personName || '---'}</td>
@@ -364,6 +375,41 @@ const Users = () => {
             </tbody>
           </table>
         </div>
+
+        {users.length > USERS_PER_PAGE && (
+          <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
+            <p className="text-sm text-gray-500">
+              Showing {((currentPage - 1) * USERS_PER_PAGE) + 1}–{Math.min(currentPage * USERS_PER_PAGE, users.length)} of {users.length}
+            </p>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1.5 text-sm rounded-md border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                ← Prev
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                <button
+                  key={page}
+                  onClick={() => setCurrentPage(page)}
+                  className={'w-9 h-9 text-sm rounded-md transition ' + (page === currentPage
+                    ? 'bg-blue-600 text-white font-medium'
+                    : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-50')}
+                >
+                  {page}
+                </button>
+              ))}
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1.5 text-sm rounded-md border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                Next →
+              </button>
+            </div>
+          </div>
+        )}
       </Card>
 
       {openMenuId && createPortal(
@@ -432,7 +478,14 @@ const Users = () => {
           isOpen={!!deleteUserTarget}
           onClose={() => setDeleteUserTarget(null)}
           user={deleteUserTarget}
-          onDeleted={() => { setDeleteUserTarget(null); refresh(); }}
+          onDeleted={() => {
+            setDeleteUserTarget(null);
+            refresh();
+            const maxPage = Math.max(1, Math.ceil((users.length - 1) / USERS_PER_PAGE));
+            if (currentPage > maxPage) {
+              setCurrentPage(maxPage);
+            }
+          }}
         />
       )}
     </div>
