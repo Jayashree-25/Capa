@@ -22,7 +22,10 @@ const STATUS_CONFIG = {
 
 const PROJECTS_PER_PAGE = 10;
 
-const Projects = () => {
+const Projects = ({ user }) => {
+  const isBoss = user?.role === 'boss';
+  const isLead = user?.role === 'lead';
+
   const [projects, setProjects] = useState([]);
   const [people, setPeople] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -204,7 +207,14 @@ const Projects = () => {
                 const s = STATUS_CONFIG[project.status] || STATUS_CONFIG.active;
                 return (
                   <tr key={project.id} className="border-b border-gray-100">
-                    <td className="p-2.5 font-semibold text-gray-900">{project.name}</td>
+                    <td className="p-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-gray-900">{project.name}</span>
+                        {isLead && project.ownerId === user.personId && (
+                          <span className="text-[10px] font-medium bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-full">Your project</span>
+                        )}
+                      </div>
+                    </td>
                     <td className="p-2.5 max-w-[250px]">
                       <button
                         onClick={() => setSelectedProject(project)}
@@ -217,7 +227,8 @@ const Projects = () => {
                     <td className="p-2.5 text-center">
                       <span className={'inline-block text-xs px-2 py-0.5 rounded-full ' + s.bg + ' ' + s.text}>{s.label}</span>
                     </td>
-                    <td className="p-2.5 text-right">
+                  <td className="p-2.5 text-right">
+                    {(isBoss || (isLead && project.ownerId === user.personId)) ? (
                       <button
                         ref={(el) => { buttonRefs.current[project.id] = el; }}
                         onClick={() => toggleMenu(project.id)}
@@ -231,7 +242,10 @@ const Projects = () => {
                           <circle cx="12" cy="19" r="1.5" />
                         </svg>
                       </button>
-                    </td>
+                    ) : (
+                      <span className="text-gray-300">&#8212;</span>
+                    )}
+                  </td>
                   </tr>
                 );
               })}
@@ -337,6 +351,8 @@ const Projects = () => {
           setCurrentPage(1);
         }}
         eligibleOwners={eligibleOwners}
+        lockOwnerId={isLead ? user.personId : null}
+        lockOwnerName={user?.personName || ''}
       />
 
       {editProject && (
@@ -349,6 +365,8 @@ const Projects = () => {
             setEditProject(null);
           }}
           eligibleOwners={eligibleOwners}
+          lockOwnerId={isLead ? user.personId : null}
+          lockOwnerName={user?.personName || ''}
         />
       )}
 
@@ -379,9 +397,32 @@ const Projects = () => {
   );
 };
 
+const OwnerField = ({ lockOwnerId, lockOwnerName, value, onChange, eligibleOwners }) => {
+  if (lockOwnerId) {
+    return (
+      <input
+        type="text"
+        value={(lockOwnerName || 'You') + ' (you)'}
+        disabled
+        className="w-full h-11 px-3.5 rounded-md border border-gray-300 bg-gray-100 text-sm text-gray-600"
+      />
+    );
+  }
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)} className={inputClass}>
+      <option value="">No owner &#8212; Unassigned</option>
+      {eligibleOwners.map(p => (
+        <option key={p.id} value={p.id}>
+          {p.name} &#8212; {p.role === 'lead' ? 'Lead' : 'Member'} &#8212; {p.team}
+        </option>
+      ))}
+    </select>
+  );
+};
+
 // ---------- Add Project Modal ----------
 
-const AddProjectModal = ({ isOpen, onClose, onCreated, eligibleOwners }) => {
+const AddProjectModal = ({ isOpen, onClose, onCreated, eligibleOwners, lockOwnerId = null, lockOwnerName = '' }) => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [ownerId, setOwnerId] = useState('');
@@ -414,7 +455,7 @@ const AddProjectModal = ({ isOpen, onClose, onCreated, eligibleOwners }) => {
       const payload = {
         name: name.trim(),
         description: description.trim(),
-        ownerId: ownerId || null,
+        ownerId: lockOwnerId || (ownerId || null),
         status
       };
       const res = await createProject(payload);
@@ -466,19 +507,16 @@ const AddProjectModal = ({ isOpen, onClose, onCreated, eligibleOwners }) => {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Assign to</label>
-            <select
+            <OwnerField
+              lockOwnerId={lockOwnerId}
+              lockOwnerName={lockOwnerName}
               value={ownerId}
-              onChange={(e) => setOwnerId(e.target.value)}
-              className={inputClass}
-            >
-              <option value="">No owner \u2014 Unassigned</option>
-              {eligibleOwners.map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.name} \u2014 {p.role === 'lead' ? 'Lead' : 'Member'} \u2014 {p.team}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-gray-400 mt-1">Leads and solo members can own projects.</p>
+              onChange={setOwnerId}
+              eligibleOwners={eligibleOwners}
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              {lockOwnerId ? 'Your projects are owned by you.' : 'Leads and solo members can own projects.'}
+            </p>
           </div>
           <div className="flex justify-end space-x-2 pt-2">
             <Button type="button" variant="secondary" onClick={handleClose}>Cancel</Button>
@@ -492,7 +530,7 @@ const AddProjectModal = ({ isOpen, onClose, onCreated, eligibleOwners }) => {
 
 // ---------- Edit Project Modal ----------
 
-const EditProjectModal = ({ isOpen, onClose, project, onUpdated, eligibleOwners }) => {
+const EditProjectModal = ({ isOpen, onClose, project, onUpdated, eligibleOwners, lockOwnerId = null, lockOwnerName = '' }) => {
   const isMounted = useRef(true);
   useEffect(() => { return () => { isMounted.current = false; }; }, []);
 
@@ -515,7 +553,7 @@ const EditProjectModal = ({ isOpen, onClose, project, onUpdated, eligibleOwners 
       const payload = {
         name: name.trim(),
         description: description.trim(),
-        ownerId: ownerId || null,
+        ownerId: lockOwnerId || (ownerId || null),
         status
       };
       const res = await updateProject(project.id, payload);
@@ -563,19 +601,16 @@ const EditProjectModal = ({ isOpen, onClose, project, onUpdated, eligibleOwners 
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Assign to</label>
-            <select
+            <OwnerField
+              lockOwnerId={lockOwnerId}
+              lockOwnerName={lockOwnerName}
               value={ownerId}
-              onChange={(e) => setOwnerId(e.target.value)}
-              className={inputClass}
-            >
-              <option value="">No owner \u2014 Unassigned</option>
-              {eligibleOwners.map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.name} \u2014 {p.role === 'lead' ? 'Lead' : 'Member'} \u2014 {p.team}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-gray-400 mt-1">Leads and solo members can own projects.</p>
+              onChange={setOwnerId}
+              eligibleOwners={eligibleOwners}
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              {lockOwnerId ? 'Your projects are owned by you.' : 'Leads and solo members can own projects.'}
+            </p>
           </div>
           <div className="flex justify-end space-x-2 pt-2">
             <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
