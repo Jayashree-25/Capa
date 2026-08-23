@@ -167,6 +167,15 @@ router.post('/people', requireRole('boss', 'lead'), async (req, res) => {
     const role = req.body.role === undefined ? 'member' : req.body.role;
     const managerId = req.body.managerId === undefined ? null : req.body.managerId;
 
+    // Leads can only add members to their OWN team reporting directly to themselves
+    if (req.user.role === 'lead') {
+      const me = data.people.find(p => p.id === req.user.personId);
+      const teamOk = me && typeof req.body.team === 'string' && req.body.team.trim() === me.team;
+      if (role !== 'member' || managerId !== req.user.personId || !teamOk) {
+        return res.status(403).json({ error: 'Leads can only add members to their own team reporting to themselves.' });
+      }
+    }
+
     const hierarchyError = validateHierarchy(role, managerId, data);
     if (hierarchyError) return res.status(400).json({ error: hierarchyError });
 
@@ -191,6 +200,22 @@ router.put('/people/:id', requireRole('boss', 'lead'), async (req, res) => {
     const data = await loadData();
     const index = data.people.findIndex(p => p.id === req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Person not found.' });
+
+    // Leads can only manage people within their subtree
+    const visible = await getVisiblePersonIds(req.user);
+    if (visible && !visible.includes(req.params.id)) {
+      return res.status(403).json({ error: 'You can only manage people within your team.' });
+    }
+
+    // Role and reporting line are structural decisions — boss only
+    if (req.user.role === 'lead') {
+      const changingRole = req.body.role !== undefined && req.body.role !== data.people[index].role;
+      const changingManager = req.body.managerId !== undefined &&
+        (req.body.managerId ?? null) !== (data.people[index].managerId ?? null);
+      if (changingRole || changingManager) {
+        return res.status(403).json({ error: 'Only the boss can change role or reporting line.' });
+      }
+    }
 
     const merged = { ...data.people[index], ...req.body };
     const error = validatePersonInput(merged);
@@ -236,6 +261,12 @@ router.delete('/people/:id', requireRole('boss', 'lead'), async (req, res) => {
     const index = data.people.findIndex(p => p.id === req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Person not found.' });
 
+    // Leads can only delete people within their subtree
+    const visible = await getVisiblePersonIds(req.user);
+    if (visible && !visible.includes(req.params.id)) {
+      return res.status(403).json({ error: 'You can only manage people within your team.' });
+    }
+
     if (data.tasks.some(t => t.assigneeId === req.params.id)) {
       return res.status(409).json({ error: 'Cannot delete: tasks are still assigned to this person. Reassign or delete those tasks first.' });
     }
@@ -270,12 +301,25 @@ router.get('/projects', async (req, res) => {
   try {
     const data = await loadData();
     const peopleById = Object.fromEntries(data.people.map(p => [p.id, p]));
-    const enriched = data.projects.map(p => ({
+    let enriched = data.projects.map(p => ({
       ...p,
       ownerName: p.ownerId ? (peopleById[p.ownerId]?.name || null) : null,
       ownerRole: p.ownerId ? (peopleById[p.ownerId]?.role || null) : null,
       ownerTeam: p.ownerId ? (peopleById[p.ownerId]?.team || null) : null
     }));
+
+    // Non-boss users only see projects they own or that are referenced
+    // by tasks inside their visible scope (keeps Tasks/Dashboard names working)
+    const visible = await getVisiblePersonIds(req.user);
+    if (visible) {
+      const scopedProjectIds = new Set(
+        data.tasks.filter(t => t.assigneeId && visible.includes(t.assigneeId)).map(t => t.projectId)
+      );
+      enriched = enriched.filter(p =>
+        p.ownerId === req.user.personId || scopedProjectIds.has(p.id)
+      );
+    }
+
     res.json(enriched);
   } catch (error) {
     res.status(500).json({ error: `Failed to fetch projects: ${error.message}` });
@@ -294,6 +338,11 @@ router.post('/projects', requireRole('boss', 'lead'), async (req, res) => {
       return res.status(400).json({ error: 'Status must be active, on_hold, or completed.' });
     }
     const data = await loadData();
+
+    // Leads can only create projects owned by themselves
+    if (req.user.role === 'lead' && ownerId !== req.user.personId) {
+      return res.status(403).json({ error: 'Leads can only create projects owned by themselves.' });
+    }
 
     // Name uniqueness
     if (data.projects.some(p => p.name.toLowerCase() === name.trim().toLowerCase())) {
@@ -345,6 +394,16 @@ router.put('/projects/:id', requireRole('boss', 'lead'), async (req, res) => {
     const index = data.projects.findIndex(p => p.id === req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Project not found.' });
 
+    // Leads can only manage projects they own and cannot transfer ownership
+    if (req.user.role === 'lead') {
+      if (data.projects[index].ownerId !== req.user.personId) {
+        return res.status(403).json({ error: 'You can only manage projects you own.' });
+      }
+      if (ownerId !== undefined && ownerId !== req.user.personId) {
+        return res.status(403).json({ error: 'You cannot transfer ownership of your project.' });
+      }
+    }
+
     // Name uniqueness — allow keeping the same name
     if (name !== undefined && name.trim() !== '') {
       const trimmedName = name.trim();
@@ -393,6 +452,11 @@ router.delete('/projects/:id', requireRole('boss', 'lead'), async (req, res) => 
     const index = data.projects.findIndex(p => p.id === req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Project not found.' });
 
+    // Leads can only delete projects they own
+    if (req.user.role === 'lead' && data.projects[index].ownerId !== req.user.personId) {
+      return res.status(403).json({ error: 'You can only delete projects you own.' });
+    }
+
     if (data.tasks.some(t => t.projectId === req.params.id)) {
       return res.status(409).json({ error: 'Cannot delete: tasks still reference this project.' });
     }
@@ -429,7 +493,8 @@ router.get('/tasks', async (req, res) => {
       ...t,
       assigneeName: t.assigneeId ? (peopleById[t.assigneeId]?.name || null) : null,
       projectName: projectsById[t.projectId]?.name || null,
-      parentTitle: t.parentId ? (tasksById[t.parentId]?.title || null) : null
+      parentTitle: t.parentId ? (tasksById[t.parentId]?.title || null) : null,
+      parentAssigneeId: t.parentId ? (tasksById[t.parentId]?.assigneeId || null) : null
     }));
     res.json(enriched);
   } catch (error) {
@@ -541,13 +606,20 @@ router.put('/tasks/:id', async (req, res) => {
 
     // Leads may only manage tasks within their management scope:
     // their subtree's tasks, chunks of parents assigned to them, or unassigned tasks they created
-    if (req.user.role === 'lead' && !existing.parentId) {
-      const visible = await getVisiblePersonIds(req.user);
-      const inScope =
-        (existing.assigneeId && visible.includes(existing.assigneeId)) ||
-        (!existing.assigneeId && existing.createdBy === req.user.personId);
-      if (!inScope) {
-        return res.status(403).json({ error: 'You can only manage tasks within your team.' });
+    if (req.user.role === 'lead') {
+      if (existing.parentId) {
+        const parent = data.tasks.find(t => t.id === existing.parentId);
+        if (!parent || parent.assigneeId !== req.user.personId) {
+          return res.status(403).json({ error: 'Only the lead assigned to a parent task can manage its chunks.' });
+        }
+      } else {
+        const visible = await getVisiblePersonIds(req.user);
+        const inScope =
+          (existing.assigneeId && visible.includes(existing.assigneeId)) ||
+          (!existing.assigneeId && existing.createdBy === req.user.personId);
+        if (!inScope) {
+          return res.status(403).json({ error: 'You can only manage tasks within your team.' });
+        }
       }
     }
 
@@ -562,6 +634,10 @@ router.put('/tasks/:id', async (req, res) => {
           return res.status(chunkIssue.status).json({ error: chunkIssue.error });
         }
       } else {
+        // Leads cannot unassign tasks they didn't create (it would escape their scope)
+        if (req.user.role === 'lead' && req.body.assigneeId === null && existing.createdBy !== req.user.personId) {
+          return res.status(403).json({ error: 'Only the task creator or a boss can unassign a task.' });
+        }
         if (req.user.role === 'lead' && req.body.assigneeId !== null) {
           const visible = await getVisiblePersonIds(req.user);
           if (!visible.includes(req.body.assigneeId)) {
