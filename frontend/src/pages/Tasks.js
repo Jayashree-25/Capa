@@ -81,7 +81,7 @@ const TasksPage = ({ user }) => {
   const rowInScope = (task) => {
     if (isBoss) return true;
     if (!isLead) return false;
-    if (task.parentId) return false; // chunk ownership checked server-side; UI keeps chunks manage-only via parent owner
+    if (task.parentId) return task.parentAssigneeId === user.personId; // owning lead only
     if (task.assigneeId && myVisibleIds && myVisibleIds.has(task.assigneeId)) return true;
     if (!task.assigneeId && task.createdBy === user.personId) return true;
     return false;
@@ -92,10 +92,7 @@ const TasksPage = ({ user }) => {
   const canChangeStatus = (task) => {
     if (isBoss) return true;
     if (isEngineerCheck()) return task.assigneeId === user.personId;
-    if (isLead) {
-      if (!task.parentId) return rowInScope(task);
-      return false; // chunk statuses managed by owning lead only
-    }
+    if (isLead) return rowInScope(task);
     return false;
   };
   function isEngineerCheck() { return user.role === 'engineer'; }
