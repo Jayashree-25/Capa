@@ -3,15 +3,21 @@ import { createPortal } from 'react-dom';
 import { Spinner } from '../components/Spinner';
 import { Modal } from '../components/Modal';
 import { Button } from '../components/Button';
-import { getPeople, updatePerson, deletePerson } from '../services/api';
+import { getPeople, updatePerson, deletePerson, getUsers, registerUser } from '../services/api';
 
 const inputClass =
   'w-full h-11 px-3.5 rounded-md border border-gray-300 bg-white text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none transition';
 
-const People = () => {
+const People = ({ user }) => {
+  const isBoss = user?.role === 'boss';
+
   const [people, setPeople] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [success, setSuccess] = useState('');
+
+  // Person ids that already have a login account (boss only)
+  const [accountPersonIds, setAccountPersonIds] = useState(() => new Set());
 
   // Filters
   const [roleFilter, setRoleFilter] = useState('all');
@@ -28,6 +34,7 @@ const People = () => {
   const [editPerson, setEditPerson] = useState(null);
   const [rolePerson, setRolePerson] = useState(null);
   const [statusPerson, setStatusPerson] = useState(null);
+  const [attachPerson, setAttachPerson] = useState(null);
 
   const closeMenu = useCallback(() => setOpenMenuId(null), []);
 
@@ -37,7 +44,7 @@ const People = () => {
       const btn = buttonRefs.current[personId];
       if (btn) {
         const rect = btn.getBoundingClientRect();
-        const menuHeight = 170;
+        const menuHeight = 210;
         const spaceBelow = window.innerHeight - rect.bottom;
         const openUpward = spaceBelow < menuHeight + 8;
         setMenuPos({
@@ -61,9 +68,14 @@ const People = () => {
   }, [openMenuId, closeMenu]);
 
   const load = () => {
-    getPeople()
-      .then(res => {
-        setPeople(res.data);
+    const requests = [getPeople()];
+    if (isBoss) requests.push(getUsers());
+    Promise.all(requests)
+      .then(([peopleRes, usersRes]) => {
+        setPeople(peopleRes.data);
+        if (usersRes) {
+          setAccountPersonIds(new Set(usersRes.data.map(u => u.personId).filter(Boolean)));
+        }
         setLoading(false);
       })
       .catch(err => {
@@ -104,6 +116,12 @@ const People = () => {
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-md flex justify-between items-center">
           <span>{error}</span>
           <button onClick={() => setError(null)} className="text-gray-400 hover:text-gray-600">✕</button>
+        </div>
+      )}
+      {success && (
+        <div className="bg-green-50 border border-green-200 text-green-800 text-sm px-4 py-3 rounded-md flex justify-between items-center">
+          <span>{success}</span>
+          <button onClick={() => setSuccess('')} className="text-gray-400 hover:text-gray-600">✕</button>
         </div>
       )}
 
@@ -223,18 +241,20 @@ const People = () => {
                   </svg>
                   Edit
                 </button>
-                <button
-                  onClick={() => { setRolePerson(person); closeMenu(); }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition text-left"
-                >
-                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                    <circle cx="9" cy="7" r="4" />
-                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                  </svg>
-                  Change role
-                </button>
+                {isBoss && (
+                  <button
+                    onClick={() => { setRolePerson(person); closeMenu(); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition text-left"
+                  >
+                    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                      <circle cx="9" cy="7" r="4" />
+                      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                    </svg>
+                    Change role
+                  </button>
+                )}
                 <button
                   onClick={() => { setStatusPerson(person); closeMenu(); }}
                   className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition text-left"
@@ -245,6 +265,18 @@ const People = () => {
                   </svg>
                   Change status
                 </button>
+                {isBoss && !accountPersonIds.has(person.id) && (
+                  <button
+                    onClick={() => { setAttachPerson(person); closeMenu(); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition text-left"
+                  >
+                    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                    Create login
+                  </button>
+                )}
                 <div className="border-t border-gray-100 my-1" />
                 <button
                   onClick={() => { handleDelete(person); closeMenu(); }}
@@ -288,6 +320,19 @@ const People = () => {
           onClose={() => setStatusPerson(null)}
           person={statusPerson}
           onUpdated={() => { setStatusPerson(null); load(); }}
+        />
+      )}
+
+      {attachPerson && (
+        <AttachLoginModal
+          isOpen={!!attachPerson}
+          onClose={() => setAttachPerson(null)}
+          person={attachPerson}
+          onAttached={(email) => {
+            setAttachPerson(null);
+            setSuccess('Login created for ' + email + '. A setup email has been sent.');
+            load();
+          }}
         />
       )}
     </div>
@@ -490,6 +535,58 @@ const ChangeStatusModal = ({ isOpen, onClose, person, onUpdated }) => {
             {submitting ? 'Saving…' : `Set to ${newStatus === 'active' ? 'Active' : 'Inactive'}`}
           </Button>
         </div>
+      </div>
+    </Modal>
+  );
+};
+
+// ---------- Attach Login Modal (boss only) ----------
+
+const AttachLoginModal = ({ isOpen, onClose, person, onAttached }) => {
+  const [email, setEmail] = useState('');
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError('');
+    try {
+      await registerUser({ email: email.trim(), personId: person.id });
+      onAttached(email.trim().toLowerCase());
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} ariaLabel="Create login">
+      <div className="space-y-4">
+        <h2 className="text-xl font-semibold text-gray-800">Create Login</h2>
+        <p className="text-sm text-gray-600">
+          Create a login account for <span className="font-semibold">{person.name}</span>.
+          They will receive an email to set their password.
+        </p>
+        {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-md">{error}</div>}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Email / Login ID</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="name@company.com"
+              className={inputClass}
+              required
+            />
+          </div>
+          <div className="flex justify-end space-x-2 pt-2">
+            <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
+            <Button type="submit" disabled={submitting}>{submitting ? 'Creating…' : 'Create Login'}</Button>
+          </div>
+        </form>
       </div>
     </Modal>
   );
