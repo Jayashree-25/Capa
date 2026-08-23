@@ -149,7 +149,12 @@ router.post('/register', requireAuth, requireRole('boss'), async (req, res) => {
         getJwtSecret(),
         { expiresIn: '72h' }
       );
-      const personDisplayName = (req.body.personName || '').trim() || normalizedEmail;
+      let personDisplayName = (req.body.personName || '').trim();
+      if (!personDisplayName && finalPersonId) {
+        const pr = await pool.query('SELECT name FROM people WHERE id = $1', [finalPersonId]);
+        personDisplayName = pr.rows[0]?.name || '';
+      }
+      if (!personDisplayName) personDisplayName = normalizedEmail;
       sendSetupEmail(normalizedEmail, personDisplayName, setupToken)
         .catch(err => console.error('Failed to send setup email:', err.message));
     }
