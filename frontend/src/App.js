@@ -46,8 +46,8 @@ function App() {
               <Switch>
                 <Route exact path="/dashboard" render={() => <Dashboard user={user} />} />
                 <Route exact path="/profile" render={() => <Profile user={user} onUserUpdated={handleUserUpdated} />} />
-                <RoleRoute user={user} roles={['boss', 'lead']} exact path="/people" render={() => <People />} />
-                <RoleRoute user={user} roles={['boss', 'lead']} exact path="/projects" render={() => <Projects />} />
+                <RoleRoute user={user} roles={['boss', 'lead']} exact path="/people" render={() => <People user={user} />} />
+                <RoleRoute user={user} roles={['boss', 'lead']} exact path="/projects" render={() => <Projects user={user} />} />
                 <RoleRoute user={user} roles={['boss']} exact path="/users" render={() => <Users />} />
                 <RoleRoute user={user} roles={['boss', 'lead', 'engineer']} exact path="/tasks" render={() => <TasksPage user={user} />} />
                 {PLACEHOLDER_PAGES.map(page => (
