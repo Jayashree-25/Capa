@@ -469,6 +469,95 @@ test('scoped views: lead sees their subtree, engineer sees only themselves', asy
   assert.strictEqual((await engReq(`/tasks/${engOwned.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'bogus' }) })).status, 400);
 });
 
+test('lead permissions: strict subtree people, project ownership, unassign guard, boss-only attach', async () => {
+  const leadA = await (await json('POST', '/people', { name: 'Lead A', team: 'AlphaL', weeklyCapacity: 40, role: 'lead' })).json();
+  const leadB = await (await json('POST', '/people', { name: 'Lead B', team: 'BetaL', weeklyCapacity: 40, role: 'lead' })).json();
+  const memA = await (await json('POST', '/people', { name: 'MemA', team: 'AlphaL', weeklyCapacity: 30, role: 'member', managerId: leadA.id })).json();
+  await json('POST', '/people', { name: 'MemB', team: 'BetaL', weeklyCapacity: 30, role: 'member', managerId: leadB.id });
+
+  const projA = await (await json('POST', '/projects', { name: 'Proj AlphaL', ownerId: leadA.id })).json();
+  const projB = await (await json('POST', '/projects', { name: 'Proj BetaL', ownerId: leadB.id })).json();
+
+  const pool = getPool();
+  const hash = await bcrypt.hash('lead-pass-123', 10);
+  await pool.query('INSERT INTO users (id, email, password_hash, role, person_id) VALUES ($1,$2,$3,$4,$5)', ['u-la', 'leadA@capa.test', hash, 'lead', leadA.id]);
+  await pool.query('INSERT INTO users (id, email, password_hash, role, person_id) VALUES ($1,$2,$3,$4,$5)', ['u-lb', 'leadB@capa.test', hash, 'lead', leadB.id]);
+
+  const loginAs = async (email) => {
+    const res = await apiFetch('/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: 'lead-pass-123' })
+    });
+    assert.strictEqual(res.status, 200);
+    return (await res.json()).token;
+  };
+  const mkAuthed = (t) => (pathname, opts = {}) => fetch(`${base}${pathname}`, {
+    ...opts,
+    headers: { ...(opts.headers || {}), Authorization: `Bearer ${t}` }
+  });
+  const aReq = mkAuthed(await loginAs('leadA@capa.test'));
+  const aJson = (method, pathname, body) => aReq(pathname, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+  // --- People scoping ---
+  assert.strictEqual((await aJson('PUT', `/people/${memA.id}`, {})).status, 200); // sanity: in-scope touch
+  const otherMember = await (await json('GET', '/people')).json(); // boss sees everyone
+  const memBOwnerRow = otherMember.find(p => p.name === 'MemB');
+  assert.strictEqual((await aJson('PUT', `/people/${memBOwnerRow.id}`, { weeklyCapacity: 99 })).status, 403);
+  assert.strictEqual((await aJson('DELETE', `/people/${memBOwnerRow.id}`)).status, 403);
+  assert.strictEqual((await aJson('DELETE', `/people/${leadB.id}`)).status, 403);
+
+  // Lead creation constraints
+  assert.strictEqual((await aJson('POST', '/people', { name: 'Evil Lead', team: 'AlphaL', role: 'lead', managerId: null })).status, 403);
+  assert.strictEqual((await aJson('POST', '/people', { name: 'Poach', team: 'BetaL', role: 'member', managerId: leadB.id })).status, 403);
+  assert.strictEqual((await aJson('POST', '/people', { name: 'WrongTeam', team: 'BetaL', role: 'member', managerId: leadA.id })).status, 403);
+  const created = await aJson('POST', '/people', { name: 'New Member', team: 'AlphaL', role: 'member', managerId: leadA.id });
+  assert.strictEqual(created.status, 201);
+
+  // Role/reporting changes are boss-only
+  assert.strictEqual((await aJson('PUT', `/people/${memA.id}`, { role: 'lead' })).status, 403);
+  assert.strictEqual((await aJson('PUT', `/people/${memA.id}`, { managerId: leadB.id })).status, 403);
+  assert.strictEqual((await aJson('PUT', `/people/${memA.id}`, { weeklyCapacity: 33, name: 'MemA Renamed' })).status, 200);
+
+  // --- Project scoping ---
+  const visibleProjects = await (await aReq('/projects')).json();
+  assert.ok(visibleProjects.some(p => p.id === projA.id));
+  assert.ok(!visibleProjects.some(p => p.id === projB.id)); // no scope tasks reference it yet
+
+  assert.strictEqual((await aJson('PUT', `/projects/${projB.id}`, { description: 'hack' })).status, 403);
+  assert.strictEqual((await aJson('DELETE', `/projects/${projB.id}`)).status, 403);
+  assert.strictEqual((await aJson('PUT', `/projects/${projA.id}`, { ownerId: leadB.id })).status, 403);
+  assert.strictEqual((await aJson('PUT', `/projects/${projA.id}`, { description: 'mine only' })).status, 200);
+  assert.strictEqual((await aJson('POST', '/projects', { name: 'Not Mine', ownerId: leadB.id })).status, 403);
+  assert.strictEqual((await aJson('POST', '/projects', { name: 'Unowned Attempt', ownerId: null })).status, 403);
+  assert.strictEqual((await aJson('POST', '/projects', { name: 'My New Proj', ownerId: leadA.id })).status, 201);
+
+  // --- Unassign guard ---
+  const bossTask = await (await json('POST', '/tasks', { title: 'Boss assigned', projectId: projA.id, assigneeId: leadA.id, estimatedHours: 4, week: '2026-08-10' })).json();
+  assert.strictEqual(bossTask.assigneeId, leadA.id); // sanity: boss->lead assignment valid
+  assert.strictEqual((await aJson('PUT', `/tasks/${bossTask.id}`, { assigneeId: null })).status, 403);
+
+  const ownTaskRes = await aJson('POST', '/tasks', { title: 'Lead backlog', projectId: projA.id, estimatedHours: 2, week: '2026-08-17' });
+  assert.strictEqual(ownTaskRes.status, 201);
+  const ownTask = await ownTaskRes.json();
+  assert.strictEqual((await aJson('PUT', `/tasks/${ownTask.id}`, { assigneeId: memA.id })).status, 200); // claim into team OK
+  assert.strictEqual((await aJson('PUT', `/tasks/${ownTask.id}`, { assigneeId: null })).status, 200); // creator may unassign
+
+  // --- Attach account is boss-only ---
+  const bare = await (await json('POST', '/people', { name: 'Bare Person', team: 'AlphaL', role: 'member', managerId: leadA.id })).json();
+  assert.strictEqual((await aJson('POST', '/auth/register', { email: 'sneaky@capa.test', personId: bare.id })).status, 403);
+  assert.strictEqual((await json('POST', '/auth/register', { email: 'bare@capa.test', personId: bare.id })).status, 201);
+  assert.strictEqual((await json('POST', '/auth/register', { email: 'bare2@capa.test', personId: bare.id })).status, 409);
+
+  // --- Chunk scope: only the owning lead manages chunks ---
+  const parentTask = await (await aJson('POST', '/tasks', { title: 'Parent for chunk', projectId: projA.id, assigneeId: leadA.id, estimatedHours: 8, week: '2026-08-24' })).json();
+  const chunk = await (await aJson('POST', '/tasks', { title: 'Chunk one', parentId: parentTask.id, assigneeId: memA.id, estimatedHours: 3, week: '2026-08-24' })).json();
+  assert.strictEqual(chunk.parentId, parentTask.id);
+  const lbReq = mkAuthed(await loginAs('leadB@capa.test'));
+  assert.strictEqual((await lbReq(`/tasks/${chunk.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'completed' }) })).status, 403);
+  assert.strictEqual((await aJson('PUT', `/tasks/${chunk.id}`, { status: 'in_progress' })).status, 200); // owning lead OK
+});
+
 // ---------- Org hierarchy ----------
 test('people roles: valid lead/member/solo hierarchies', async () => {
   const lead = await json('POST', '/people', { name: 'Lead One', team: 'Omega', weeklyCapacity: 40, role: 'lead' });
