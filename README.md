@@ -179,11 +179,15 @@ GET /api/reports/load
 ```
 ---
 
-## Testing
+## 🧪 Testing
+
+Capa includes a backend test suite using Node's built-in `node:test` framework.
+
+Run the tests from the `backend` directory:
 
 ```bash
 cd backend
-npm test     # 19 tests (node:test) — creates a throwaway `capa_test` database, never touches your data
+npm test
 ```
 
 ---
