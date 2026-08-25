@@ -200,17 +200,22 @@ npm test
 
 ---
 
-## Demo Data
+## 🎯 Demo Data
 
-Seeded with 5 people, 4 projects, and 14 tasks from `backend/data/mockData.json` — including intentionally overloaded people so the overload indicators are visible immediately.
+Capa includes seed data so you can explore the dashboard immediately after setup.
 
----
+The demo dataset includes:
 
-## Future Plans
+- **5 people**
+- **4 projects**
+- **14 tasks**
+- Workloads intentionally configured to demonstrate capacity warnings and overload states
 
-- **Jira Integration**: sync tasks/people from Jira (`backend/services/jiraServices.js` stub).
-- **Advanced Analytics**: trend lines and bottleneck prediction.
-- **Role-Based Views**: tailor dashboards for PMs, Engineers, and Leadership.
+Run the database setup command to load the demo data:
+
+```bash
+npm run db:setup
+```
 
 ---
 
