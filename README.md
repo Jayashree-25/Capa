@@ -1,8 +1,12 @@
 # Capa
 
-A full-stack capacity planner for managing **who** is working on **what** — and **whether they're overloaded**.
+> **Team capacity planning without the spreadsheet chaos.**
 
-Track team members, assign tasks with estimated hours per week, and instantly see who is over their weekly capacity (e.g. 40 hrs/week). Reassign work between people with simple drag-and-drop.
+Capa is a full-stack capacity planner that helps teams understand **who is working on what, how much capacity they have, and where work is piling up**.
+
+Assign tasks with estimated hours, organize work by week or month, and instantly identify overloaded team members. Managers can easily rebalance workloads with drag-and-drop reassignment.
+
+**Built for teams that want a clear picture of workload and capacity — without relying on spreadsheets.**
 
 ---
 
