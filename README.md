@@ -10,15 +10,35 @@ Assign tasks with estimated hours, organize work by week or month, and instantly
 
 ---
 
-## Features
+## ✨ Features
 
-- **Per-person workload**: assign tasks (with estimated hours) to people, bucketed by week or month.
-- **Capacity vs. assigned hours**: each person's total assigned hours is compared against their weekly capacity (40h default, configurable per person).
-- **Overload indicators**: red cells + "Overloaded" badges wherever assigned hours exceed capacity (amber when ≥ 80%).
-- **Filters**: by team, by project, and by time period (week or month view with prev/next navigation).
-- **Drag-and-drop reassignment**: drag a task chip onto another person's row (or the Unassigned group) to move it.
-- **API-driven**: full REST API for people, projects, tasks, and the load report.
-- **Auth & roles (RBAC)**: login with email/password (bcrypt + JWT). All API routes (except `/api/auth/login`) require a token; a boss can create users and link them to people.
+### 📊 Capacity & Workload
+
+- **Per-person capacity** — configure weekly capacity for each team member.
+- **Workload tracking** — assign tasks with estimated hours and organize them by week or month.
+- **Capacity visualization** — instantly compare assigned hours against available capacity.
+- **Overload detection** — quickly identify people who are approaching or exceeding their capacity.
+- **Team & project filters** — focus on the people and work that matter.
+
+### 🔄 Workload Management
+
+- **Drag-and-drop reassignment** — move tasks between team members or back to unassigned.
+- **Task delegation** — break larger tasks into smaller chunks and distribute them across team members.
+- **Week & month views** — navigate through workloads across different time periods.
+- **Project-based planning** — understand how project work contributes to team capacity.
+
+### 🔐 Access & Collaboration
+
+- **Role-based access control** — different capabilities for Bosses, Leads, and Engineers.
+- **Organizational hierarchy** — Leads see and manage their teams through the manager hierarchy.
+- **Scoped visibility** — users only see the people, projects, and tasks they're authorized to access.
+- **Secure authentication** — JWT-based authentication with bcrypt password hashing.
+
+### ⚙️ Backend & API
+
+- **REST API** — dedicated endpoints for people, projects, tasks, users, and capacity reports.
+- **PostgreSQL persistence** — relational storage with SQL migrations and foreign-key constraints.
+- **Server-side authorization** — permissions and organizational scope are enforced by the backend.
 
 ### Roles & what each can see/do
 
