@@ -121,34 +121,62 @@ cd Capa
 
 ---
 
-## API Endpoints
+## 🔌 API
 
-| **Endpoint**            | **Method** | **Description** |
-|-------------------------|------------|-----------------|
-| `/api/auth/login`       | POST       | **Public** — login, returns a JWT (`token`) + user |
-| `/api/auth/me`          | GET        | Current user (any authenticated) |
-| `/api/auth/register`    | POST       | Create a user (`email`, `password`, `role`, `personId`) — **boss only** |
-| `/api/auth/users`       | GET        | List users — **boss only** |
-| `/api/people`           | GET/POST   | List people / add a person (`name`, `team`, `weeklyCapacity`, `managerId`) |
-| `/api/people/:id`       | PUT/DELETE | Update person (incl. `managerId`) / delete (blocked while tasks are assigned) |
-| `/api/teams`            | GET        | Distinct team names (for filters) |
-| `/api/projects`         | GET/POST   | List projects / add a project |
-| `/api/projects/:id`     | DELETE     | Delete a project (blocked while tasks reference it) |
-| `/api/tasks`            | GET/POST   | List tasks (with assignee/project names) / add a task |
-| `/api/tasks/:id`        | PUT/DELETE | Update a task (reassign via `assigneeId`) / delete |
-| `/api/reports/load`     | GET        | **Load report** — per-person assigned vs. capacity |
+Capa exposes a REST API for authentication, people, projects, tasks, and workload reporting.
 
-> All endpoints **except** `/api/auth/login` require `Authorization: Bearer <token>`.
+### Authentication
 
-### Load report query params
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| `POST` | `/api/auth/login` | Public | Authenticate and receive a JWT |
+| `GET` | `/api/auth/me` | Authenticated | Get the current user |
+| `POST` | `/api/auth/register` | Boss | Create a user account |
+| `GET` | `/api/auth/users` | Boss | List user accounts |
 
-`GET /api/reports/load?granularity=week|month&from=YYYY-MM-DD|YYYY-MM&to=...&team=Alpha&project=pr-1`
+### People & Teams
 
-Returns per person: per-period `assignedHours` vs `capacityHours`, `utilization`, `overloaded` flag, totals for the range, and a `teamTotals` row.
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| `GET` | `/api/people` | Authenticated | List people within the user's scope |
+| `POST` | `/api/people` | Boss / Lead | Add a team member |
+| `PUT` | `/api/people/:id` | Boss / Lead | Update a team member |
+| `DELETE` | `/api/people/:id` | Boss / Lead | Remove a team member |
+| `GET` | `/api/teams` | Authenticated | List available teams |
 
-- Week granularity: capacity = `weeklyCapacity` per week.
-- Month granularity: capacity = `weeklyCapacity` × number of weeks (Mondays) in that month.
+### Projects
 
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| `GET` | `/api/projects` | Authenticated | List projects within the user's scope |
+| `POST` | `/api/projects` | Boss / Lead | Create a project |
+| `DELETE` | `/api/projects/:id` | Boss / Lead | Delete a project |
+
+### Tasks
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| `GET` | `/api/tasks` | Authenticated | List tasks within the user's scope |
+| `POST` | `/api/tasks` | Role-based | Create a task |
+| `PUT` | `/api/tasks/:id` | Role-based | Update a task or reassign work |
+| `DELETE` | `/api/tasks/:id` | Role-based | Delete a task |
+
+### Workload Reports
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| `GET` | `/api/reports/load` | Authenticated | Get capacity, workload, utilization, and overload information |
+
+> **Authentication:** All API endpoints except `POST /api/auth/login` require a valid JWT:
+>
+> `Authorization: Bearer <token>`
+
+### Load Report
+The load report supports weekly and monthly views:
+
+```text
+GET /api/reports/load
+```
 ---
 
 ## Testing
