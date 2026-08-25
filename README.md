@@ -40,48 +40,60 @@ Assign tasks with estimated hours, organize work by week or month, and instantly
 - **PostgreSQL persistence** — relational storage with SQL migrations and foreign-key constraints.
 - **Server-side authorization** — permissions and organizational scope are enforced by the backend.
 
-### Roles & what each can see/do
+## 🔐 Roles & Access Control
 
-| Role | Sees | Can do |
+Capa uses role-based access control (RBAC) combined with an organizational manager hierarchy.
+
+| Role | Access | Capabilities |
 |---|---|---|
-| **boss** | everyone | everything: manage people/projects, add/edit/delete tasks, reassign |
-| **lead** | themselves + everyone below them in the manager tree (`managerId`) | manage people/projects, add/edit/delete tasks, reassign |
-| **engineer** | only themselves and their own tasks | add tasks (assigned to self), update their own tasks; read-only report |
-
-Scoping is enforced server-side (see `backend/lib/scope.js`) — a lead only ever sees their own subtree in people, tasks, teams, and the load report.
+| **Boss** | Full organization | Manage people, projects, tasks, users, and workloads |
+| **Lead** | Their team + reporting hierarchy | Manage team members, projects, tasks, and workload assignments |
+| **Engineer** | Self + assigned work | Create tasks for themselves, update their own tasks, and view their workload |
 
 ---
 
-## Tech Stack
+## 🛠️ Tech Stack
 
-| **Frontend**            | **Backend**        | **Storage**         |
-|-------------------------|--------------------|---------------------|
-| React 16                | Node.js + Express 5 | PostgreSQL (via Docker) |
-| Tailwind CSS v3         | REST API           | Axios (HTTP client) |
-| Native HTML5 drag & drop | Helmet / CORS / rate limiting | `pg` driver + SQL migrations |
+| Layer | Technologies |
+|---|---|
+| **Frontend** | React 16, Tailwind CSS v3, Axios |
+| **Backend** | Node.js, Express 5, REST API |
+| **Database** | PostgreSQL, `pg`, SQL migrations |
+| **Authentication** | JWT, bcrypt |
+| **Security** | Helmet, CORS, rate limiting |
+| **Interactions** | Native HTML5 Drag & Drop |
+| **Development** | npm, Docker |
 
 ---
 
-## Getting Started
+## 🚀 Getting Started
 
 ### Prerequisites
-- Node.js ≥ 18
-- npm
 
-### Installation
+Make sure you have the following installed:
 
-1. **Clone the repo**:
-   ```bash
-   git clone https://github.com/Jayashree-25/Capa.git
-   cd capa
+- **Node.js** ≥ 18
+- **npm**
+- **Docker** and **Docker Compose**
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/Jayashree-25/Capa.git
+cd Capa
    ```
 
-2. **Start PostgreSQL** (Docker):
+### 2. **Start PostgreSQL** (Docker):
+
+   Capa uses PostgreSQL for persistent storage.
    ```bash
    docker compose up -d        # postgres on localhost:5432
    ```
+   This starts PostgreSQL on localhost:5432.
 
-3. **Backend Setup**:
+### 3. **Backend Setup**:
+
+   Open a terminal in the backend directory:
    ```bash
    cd backend
    npm install
@@ -90,12 +102,14 @@ Scoping is enforced server-side (see `backend/lib/scope.js`) — a lead only eve
    npm start              # Runs on http://localhost:3001
    ```
 
-4. **Create the first user** (a boss, in another terminal):
+### 4. **Create the first user** (a boss, in another terminal):
+
+   Open a new terminal and run the following command from the backend directory:
    ```bash
    npm run create:user -- --email boss@example.com --password change-me-123 --role boss
    ```
 
-5. **Frontend Setup**:
+### 5. **Frontend Setup**:
    ```bash
    cd ../frontend
    npm install
@@ -103,7 +117,7 @@ Scoping is enforced server-side (see `backend/lib/scope.js`) — a lead only eve
    npm start              # Runs on http://localhost:3000
    ```
 
-6. Open **http://localhost:3000**.
+### 6. Open **http://localhost:3000**.
 
 ---
 
