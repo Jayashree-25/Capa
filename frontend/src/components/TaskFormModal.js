@@ -6,7 +6,7 @@ import { weekToMonday, toISO } from '../utils/dateUtils';
 
 const personLabel = (p) => `${p.name} — ${p.role === 'lead' ? 'Lead' : 'Member'} · ${p.team}`;
 
-const TaskFormModal = ({ isOpen, onClose, onCreated, people = [], projects = [], currentMonday, assigneeLock = null, isBoss = false, assigneeOptions = null, assigneeOptionsLabel = 'My team' }) => {
+const TaskFormModal = ({ isOpen, onClose, onCreated, people = [], projects = [], currentMonday, assigneeLock = null, isBoss = false, assigneeOptions = null, assigneeOptionsLabel = 'My team', allowUnassigned = false }) => {
   const [title, setTitle] = useState('');
   const [projectId, setProjectId] = useState('');
   const [assigneeId, setAssigneeId] = useState('');
@@ -88,8 +88,9 @@ const TaskFormModal = ({ isOpen, onClose, onCreated, people = [], projects = [],
                 value={assigneeId}
                 onChange={(e) => setAssigneeId(e.target.value)}
                 className="w-full h-11 px-3.5 rounded-md border border-gray-300 bg-white text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none transition"
-                required
+                required={!allowUnassigned}
               >
+                {allowUnassigned && <option value="">Unassigned — backlog</option>}
                 <option value="">Select assignee…</option>
                 {assigneeOptions ? (
                   <optgroup label={assigneeOptionsLabel}>
