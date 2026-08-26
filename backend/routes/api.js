@@ -528,7 +528,8 @@ router.get('/tasks', async (req, res) => {
     const visible = await getVisiblePersonIds(req.user);
     if (visible) {
       if (req.user.role === 'engineer') {
-        tasks = tasks.filter(t => t.assigneeId === req.user.personId);
+        // Members see their own and teammates' assigned tasks — never unassigned backlog
+        tasks = tasks.filter(t => t.assigneeId && visible.includes(t.assigneeId));
       } else {
         // Leads see their subtree's tasks plus unassigned tasks they created themselves
         tasks = tasks.filter(t =>
