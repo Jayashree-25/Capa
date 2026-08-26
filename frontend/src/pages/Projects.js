@@ -96,6 +96,19 @@ const Projects = ({ user }) => {
     p.role === 'lead' || (p.role === 'member' && !p.managerId)
   ), [people]);
 
+  // Owner filter options come from the visible project rows themselves
+  const projectOwners = useMemo(() => {
+    const map = new Map();
+    for (const p of projects) {
+      if (p.ownerId && p.ownerName && !map.has(p.ownerId)) {
+        map.set(p.ownerId, p.ownerName);
+      }
+    }
+    return [...map.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [projects]);
+
   const filteredProjects = useMemo(() => {
     return projects.filter(p => {
       if (searchQuery) {
@@ -165,8 +178,8 @@ const Projects = ({ user }) => {
           className="h-10 px-3 rounded-md border border-gray-300 bg-white text-sm text-gray-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none transition"
         >
           <option value="all">All owners</option>
-          {eligibleOwners.map(p => (
-            <option key={p.id} value={p.id}>{p.name}</option>
+          {projectOwners.map(o => (
+            <option key={o.id} value={o.id}>{o.name}</option>
           ))}
         </select>
         <select
