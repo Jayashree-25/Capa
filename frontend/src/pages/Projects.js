@@ -161,7 +161,7 @@ const Projects = ({ user }) => {
           <h1 className="text-2xl font-semibold text-gray-800">Projects</h1>
           <p className="text-sm text-gray-500 mt-0.5">Create projects and manage project ownership.</p>
         </div>
-        <Button onClick={() => setAddOpen(true)}>+ Add Project</Button>
+        {(isBoss || isLead) && <Button onClick={() => setAddOpen(true)}>+ Add Project</Button>}
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
