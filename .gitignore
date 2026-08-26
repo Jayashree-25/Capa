@@ -72,3 +72,13 @@ Thumbs.db
 # Temp files
 *.tmp
 *.bak
+
+# ================================================
+# Planning documents
+# ================================================
+/USERS_PAGE_PLAN.md
+/IMPLEMENTATION_PLAN.md
+/PROJECTS_UPGRADE_PLAN.md
+/DASHBOARD_PROJECT_INTEGRATION_PLAN.md
+/TASKS_SECTION_ANALYSIS.md
+/LEAD_PHASE_PLAN.md
