@@ -6,24 +6,27 @@ import { createPerson } from '../services/api';
 const inputClass =
   'w-full h-11 px-3.5 rounded-md border border-gray-300 bg-white text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none transition';
 
-const PersonFormModal = ({ isOpen, onClose, onCreated, teams = [], people = [] }) => {
+const PersonFormModal = ({ isOpen, onClose, onCreated, teams = [], people = [], lockToLeadId = null }) => {
+  const lockedLead = lockToLeadId ? people.find(p => p.id === lockToLeadId) : null;
+
   const [name, setName] = useState('');
   const [team, setTeam] = useState('');
   const [role, setRole] = useState('member');
-  const [managerId, setManagerId] = useState('');
+  const [managerId, setManagerId] = useState(lockToLeadId || '');
   const [weeklyCapacity, setWeeklyCapacity] = useState(40);
   const [customTeam, setCustomTeam] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const leads = people.filter(p => p.role === 'lead');
-  const selectedLead = role === 'member' ? leads.find(p => p.id === managerId) : null;
+  const effectiveManagerId = lockedLead ? lockedLead.id : managerId;
+  const selectedLead = role === 'member' ? leads.find(p => p.id === effectiveManagerId) : null;
 
   const resetForm = () => {
     setName('');
     setTeam('');
     setRole('member');
-    setManagerId('');
+    setManagerId(lockToLeadId || '');
     setWeeklyCapacity(40);
     setCustomTeam('');
     setError('');
@@ -44,7 +47,7 @@ const PersonFormModal = ({ isOpen, onClose, onCreated, teams = [], people = [] }
         team: resolvedTeam,
         weeklyCapacity: Number(weeklyCapacity),
         role,
-        managerId: role === 'lead' ? null : (managerId || null)
+        managerId: role === 'lead' ? null : (effectiveManagerId || null)
       });
       resetForm();
       onCreated(response.data);
@@ -109,21 +112,25 @@ const PersonFormModal = ({ isOpen, onClose, onCreated, teams = [], people = [] }
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Role</label>
-            <div className="flex rounded-md border border-gray-300 overflow-hidden w-fit">
-              {['member', 'lead'].map(option => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => {
-                    setRole(option);
-                    setManagerId('');
-                  }}
-                  className={`h-10 px-4 text-sm font-medium capitalize ${role === option ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
-                >
-                  {option}
-                </button>
-              ))}
-            </div>
+            {lockedLead ? (
+              <p className="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-md px-3.5 py-2.5">Member</p>
+            ) : (
+              <div className="flex rounded-md border border-gray-300 overflow-hidden w-fit">
+                {['member', 'lead'].map(option => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => {
+                      setRole(option);
+                      setManagerId('');
+                    }}
+                    className={`h-10 px-4 text-sm font-medium capitalize ${role === option ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Reports to</label>
@@ -131,6 +138,13 @@ const PersonFormModal = ({ isOpen, onClose, onCreated, teams = [], people = [] }
               <p className="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-md px-3.5 py-2.5">
                 Leads report directly to the Boss.
               </p>
+            ) : lockedLead ? (
+              <input
+                type="text"
+                value={lockedLead.name + ' (you)'}
+                disabled
+                className="w-full h-11 px-3.5 rounded-md border border-gray-300 bg-gray-100 text-sm text-gray-600"
+              />
             ) : (
               <select
                 value={managerId}
