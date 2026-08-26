@@ -12,6 +12,8 @@ const inputClass =
 const People = ({ user }) => {
   const isBoss = user?.role === 'boss';
   const isLead = user?.role === 'lead';
+  const isEngineer = user?.role === 'engineer';
+  const canManage = isBoss || isLead;
 
   const [people, setPeople] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -130,13 +132,17 @@ const People = ({ user }) => {
 
       <div className="flex flex-wrap justify-between items-center gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-800">People</h1>
+          <h1 className="text-2xl font-semibold text-gray-800">{isEngineer ? 'My Team' : 'People'}</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            {isLead ? 'Your team members and reporting lines.' : 'Team members, roles, and reporting lines.'}
+            {isEngineer
+              ? 'Your Lead and teammates, read-only.'
+              : isLead
+                ? 'Your team members and reporting lines.'
+                : 'Team members, roles, and reporting lines.'}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button onClick={() => setAddOpen(true)}>+ Add Member</Button>
+          {canManage && <Button onClick={() => setAddOpen(true)}>+ Add Member</Button>}
           {hasFilters && (
             <button
               onClick={() => { setRoleFilter('all'); setTeamFilter('all'); setStatusFilter('all'); }}
@@ -174,7 +180,9 @@ const People = ({ user }) => {
                 <th className="text-left p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Team</th>
                 <th className="text-right p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Capacity</th>
                 <th className="text-center p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Status</th>
-                <th className="text-right p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Actions</th>
+                {canManage && (
+                  <th className="text-right p-2.5 border-b-2 border-gray-200 text-gray-600 font-semibold">Actions</th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -198,25 +206,29 @@ const People = ({ user }) => {
                     )}
                   </td>
                   <td className="p-2.5 text-right">
-                    <button
-                      ref={(el) => { buttonRefs.current[person.id] = el; }}
-                      onClick={() => toggleMenu(person.id)}
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-md border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition"
-                      aria-label="Person actions"
-                      title="Person actions"
-                    >
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                        <circle cx="12" cy="5" r="1.5" />
-                        <circle cx="12" cy="12" r="1.5" />
-                        <circle cx="12" cy="19" r="1.5" />
-                      </svg>
-                    </button>
+                    {canManage ? (
+                      <button
+                        ref={(el) => { buttonRefs.current[person.id] = el; }}
+                        onClick={() => toggleMenu(person.id)}
+                        className="inline-flex items-center justify-center w-8 h-8 rounded-md border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition"
+                        aria-label="Person actions"
+                        title="Person actions"
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                          <circle cx="12" cy="5" r="1.5" />
+                          <circle cx="12" cy="12" r="1.5" />
+                          <circle cx="12" cy="19" r="1.5" />
+                        </svg>
+                      </button>
+                    ) : (
+                      <span className="text-gray-300">&#8212;</span>
+                    )}
                   </td>
                 </tr>
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-gray-400">
+                  <td colSpan={canManage ? 6 : 5} className="p-8 text-center text-gray-400">
                     {hasFilters ? 'No people match the selected filters.' : 'No people found.'}
                   </td>
                 </tr>
