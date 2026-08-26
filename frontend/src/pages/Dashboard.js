@@ -216,7 +216,7 @@ const Dashboard = ({ user }) => {
           <span className={`${isMember ? 'font-medium text-gray-600' : 'font-semibold text-gray-900'} whitespace-nowrap`}>{person.name}</span>
           {isLead && <span className="text-xs font-medium bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">Lead</span>}
           {person.overloaded && <span className="text-xs font-medium bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Overloaded</span>}
-          {canManage && (
+          {canManage && person.id !== user.personId && (
             <button
               onClick={() => handleDeletePerson(person)}
               className="ml-1.5 shrink-0 text-gray-400 hover:text-red-500"
