@@ -435,11 +435,13 @@ test('scoped views: lead sees their subtree, engineer sees only themselves', asy
   assert.deepStrictEqual(leadPeople.map(p => p.id).sort(), [empA.id, empB.id, mgr.id].sort());
 
   const engPeople = await (await engReq('/people')).json();
-  assert.deepStrictEqual(engPeople.map(p => p.id), [empA.id]);
+  // Member visibility: self + Lead + teammates (subtree), intentionally wider than before
+  assert.deepStrictEqual(engPeople.map(p => p.id).sort(), [empA.id, empB.id, mgr.id].sort());
 
   const engTasks = await (await engReq('/tasks')).json();
-  assert.strictEqual(engTasks.length, 1);
-  assert.strictEqual(engTasks[0].title, 'EmpA task');
+  assert.strictEqual(engTasks.length, 2);
+  assert.ok(engTasks.some(t => t.title === 'EmpA task'));
+  assert.ok(engTasks.some(t => t.title === 'EmpB task'));
 
   // Engineer project reads are scoped to own-task-referenced projects
   const engProjects = await (await engReq('/projects')).json();
@@ -454,8 +456,8 @@ test('scoped views: lead sees their subtree, engineer sees only themselves', asy
   assert.deepStrictEqual(leadTeams, ['Omega']);
 
   assert.strictEqual((await engReq(`/tasks/${empBtask.id}`, { method: 'DELETE' })).status, 403);
-  const engTasksAfter = await (await engReq('/tasks')).json();
-  assert.ok(!engTasksAfter.some(t => t.id === empBtask.id));
+  // Member now SEES teammate tasks (visibility widened); delete above still denied
+  assert.strictEqual((await engReq('/people', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Hacked', team: 'Omega' }) })).status, 403);
   assert.strictEqual((await engReq(`/people/${mgr.id}`, { method: 'DELETE' })).status, 403);
   assert.strictEqual((await engReq('/projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Hacked' }) })).status, 403);
 
@@ -582,6 +584,91 @@ test('lead permissions: strict subtree people, project ownership, unassign guard
   const everyone = await (await json('GET', '/people')).json();
   const memARow = everyone.find(p => p.id === memA.id);
   assert.strictEqual(memARow.team, 'AlphaL Renamed');
+});
+
+test('member visibility: team subtree, no backlog, cross-team isolation, solo member, write walls', async () => {
+  const leadJ = await (await json('POST', '/people', { name: 'Lead J', team: 'TeamJ', weeklyCapacity: 40, role: 'lead' })).json();
+  const aditi = await (await json('POST', '/people', { name: 'Aditi M', team: 'TeamJ', weeklyCapacity: 40, role: 'member', managerId: leadJ.id })).json();
+  const bobM = await (await json('POST', '/people', { name: 'Bob M', team: 'TeamJ', weeklyCapacity: 40, role: 'member', managerId: leadJ.id })).json();
+  const leadS = await (await json('POST', '/people', { name: 'Lead S', team: 'TeamS', weeklyCapacity: 40, role: 'lead' })).json();
+  await json('POST', '/people', { name: 'Tom S', team: 'TeamS', weeklyCapacity: 30, role: 'member', managerId: leadS.id });
+  const soloP = await (await json('POST', '/people', { name: 'Priya Solo', team: 'TeamSolo', weeklyCapacity: 25, role: 'member' })).json();
+
+  const projJ = await (await json('POST', '/projects', { name: 'Proj J', ownerId: leadJ.id })).json();
+  const projS = await (await json('POST', '/projects', { name: 'Proj S', ownerId: leadS.id })).json();
+
+  const pool = getPool();
+  const hash = await bcrypt.hash('member-pass-123', 10);
+  await pool.query('INSERT INTO users (id, email, password_hash, role, person_id) VALUES ($1,$2,$3,$4,$5)', ['u-adi', 'aditi@capa.test', hash, 'engineer', aditi.id]);
+  await pool.query('INSERT INTO users (id, email, password_hash, role, person_id) VALUES ($1,$2,$3,$4,$5)', ['u-solo2', 'priya@capa.test', hash, 'engineer', soloP.id]);
+  await pool.query('INSERT INTO users (id, email, password_hash, role, person_id) VALUES ($1,$2,$3,$4,$5)', ['u-lj', 'leadj@capa.test', hash, 'lead', leadJ.id]);
+
+  const loginAs = async (email) => {
+    const res = await apiFetch('/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: 'member-pass-123' })
+    });
+    assert.strictEqual(res.status, 200);
+    return (await res.json()).token;
+  };
+  const mkAuthed = (t) => (pathname, opts = {}) => fetch(`${base}${pathname}`, {
+    ...opts,
+    headers: { ...(opts.headers || {}), Authorization: `Bearer ${t}` }
+  });
+  const adi = mkAuthed(await loginAs('aditi@capa.test'));
+  const adiJson = (method, pathname, body) => adi(pathname, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const solo = mkAuthed(await loginAs('priya@capa.test'));
+  const lj = mkAuthed(await loginAs('leadj@capa.test'));
+  const ljJson = (method, pathname, body) => lj(pathname, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+  // Team data — Lead J assigns to their own members (boss cannot target managed members)
+  const tA = await (await ljJson('POST', '/tasks', { title: 'Aditi task', projectId: projJ.id, assigneeId: aditi.id, estimatedHours: 5, week: '2026-09-07' })).json();
+  const tB = await (await ljJson('POST', '/tasks', { title: 'Bob task', projectId: projJ.id, assigneeId: bobM.id, estimatedHours: 4, week: '2026-09-07' })).json();
+  await json('POST', '/tasks', { title: 'Team backlog', projectId: projJ.id, assigneeId: null, estimatedHours: 2, week: '2026-09-07' });
+  await json('POST', '/tasks', { title: 'Tom task', projectId: projS.id, assigneeId: leadS.id, estimatedHours: 1, week: '2026-09-07' });
+
+  // People/teams scoping
+  const adiPeople = await (await adi('/people')).json();
+  assert.deepStrictEqual(adiPeople.map(p => p.id).sort(), [leadJ.id, aditi.id, bobM.id].sort());
+  const adiTeams = await (await adi('/teams')).json();
+  assert.deepStrictEqual(adiTeams, ['TeamJ']);
+
+  // Tasks: own + teammates only; no backlog, no cross-team
+  const adiTasks = await (await adi('/tasks')).json();
+  const titles = adiTasks.map(t => t.title).sort();
+  assert.deepStrictEqual(titles, ['Aditi task', 'Bob task']);
+
+  // Projects: referenced-by-team + owned only
+  const adiProjects = await (await adi('/projects')).json();
+  assert.ok(adiProjects.some(p => p.id === projJ.id));
+  assert.ok(!adiProjects.some(p => p.id === projS.id));
+
+  // Write walls
+  assert.strictEqual((await adiJson('POST', '/tasks', { title: 'Nope', projectId: projJ.id, assigneeId: aditi.id, estimatedHours: 1, week: '2026-09-07' })).status, 403);
+  assert.strictEqual((await adiJson('DELETE', `/tasks/${tA.id}`)).status, 403);
+  assert.strictEqual((await adiJson('PUT', `/tasks/${tB.id}`, { status: 'completed' })).status, 403); // teammate's task
+  assert.strictEqual((await adiJson('PUT', `/tasks/${tA.id}`, { title: 'hack' })).status, 403); // non-status edit on own
+  assert.strictEqual((await adiJson('PUT', `/people/${bobM.id}`, { weeklyCapacity: 99 })).status, 403);
+  assert.strictEqual((await adiJson('DELETE', `/people/${bobM.id}`)).status, 403);
+  assert.strictEqual((await adiJson('PUT', `/projects/${projJ.id}`, { description: 'x' })).status, 403);
+  assert.strictEqual((await adiJson('DELETE', `/projects/${projJ.id}`)).status, 403);
+
+  // Own-task status update + single-source sync to Lead and Boss
+  assert.strictEqual((await adiJson('PUT', `/tasks/${tA.id}`, { status: 'in_progress' })).status, 200);
+  const ljTasks = await (await lj('/tasks')).json();
+  assert.strictEqual(ljTasks.find(t => t.id === tA.id).status, 'in_progress');
+  const bossTasks = await (await json('GET', '/tasks')).json();
+  assert.strictEqual(bossTasks.find(t => t.id === tA.id).status, 'in_progress');
+
+  // Solo member: personal-only scope
+  const soloPeople = await (await solo('/people')).json();
+  assert.deepStrictEqual(soloPeople.map(p => p.id), [soloP.id]);
+  await json('POST', '/tasks', { title: 'Priya own', projectId: projJ.id, assigneeId: soloP.id, estimatedHours: 2, week: '2026-09-14' });
+  const soloTasks = await (await solo('/tasks')).json();
+  assert.deepStrictEqual(soloTasks.map(t => t.title), ['Priya own']);
+  const soloTeams = await (await solo('/teams')).json();
+  assert.deepStrictEqual(soloTeams, ['TeamSolo']);
 });
 
 // ---------- Org hierarchy ----------
