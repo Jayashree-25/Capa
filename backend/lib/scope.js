@@ -3,15 +3,20 @@ const { getPool } = require('./db');
 // Returns the person IDs a user is allowed to see.
 // - boss: everything (returns null = "no restriction")
 // - lead: themselves + everyone below them in the manager tree
-// - engineer: themselves only
+// - engineer: their Lead + the Lead's entire subtree (their team);
+//   solo members without a Lead degrade to personal-only visibility
 const getVisiblePersonIds = async (user) => {
   if (user.role === 'boss') return null;
   if (!user.personId) return [];
 
   const { rows } = await getPool().query('SELECT id, manager_id AS "managerId" FROM people');
 
+  const me = rows.find(p => p.id === user.personId);
+  const teamRootId = user.role === 'engineer' && me && me.managerId ? me.managerId : null;
+
   const visible = new Set([user.personId]);
-  if (user.role === 'lead') {
+  if (teamRootId) visible.add(teamRootId);
+  if (user.role === 'lead' || teamRootId) {
     let changed = true;
     while (changed) {
       changed = false;
