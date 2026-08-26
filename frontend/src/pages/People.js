@@ -4,12 +4,14 @@ import { Spinner } from '../components/Spinner';
 import { Modal } from '../components/Modal';
 import { Button } from '../components/Button';
 import { getPeople, updatePerson, deletePerson, getUsers, registerUser } from '../services/api';
+import PersonFormModal from '../components/PersonFormModal';
 
 const inputClass =
   'w-full h-11 px-3.5 rounded-md border border-gray-300 bg-white text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none transition';
 
 const People = ({ user }) => {
   const isBoss = user?.role === 'boss';
+  const isLead = user?.role === 'lead';
 
   const [people, setPeople] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -35,6 +37,7 @@ const People = ({ user }) => {
   const [rolePerson, setRolePerson] = useState(null);
   const [statusPerson, setStatusPerson] = useState(null);
   const [attachPerson, setAttachPerson] = useState(null);
+  const [addOpen, setAddOpen] = useState(false);
 
   const closeMenu = useCallback(() => setOpenMenuId(null), []);
 
@@ -128,9 +131,12 @@ const People = ({ user }) => {
       <div className="flex flex-wrap justify-between items-center gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-gray-800">People</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Team members, roles, and reporting lines.</p>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {isLead ? 'Your team members and reporting lines.' : 'Team members, roles, and reporting lines.'}
+          </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button onClick={() => setAddOpen(true)}>+ Add Member</Button>
           {hasFilters && (
             <button
               onClick={() => { setRoleFilter('all'); setTeamFilter('all'); setStatusFilter('all'); }}
@@ -256,8 +262,9 @@ const People = ({ user }) => {
                   </button>
                 )}
                 <button
-                  onClick={() => { setStatusPerson(person); closeMenu(); }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition text-left"
+                  onClick={() => { if (person.id !== user?.personId) setStatusPerson(person); closeMenu(); }}
+                  disabled={person.id === user?.personId}
+                  className={'w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition text-left ' + (person.id === user?.personId ? 'opacity-40 cursor-not-allowed' : '')}
                 >
                   <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" />
@@ -279,8 +286,9 @@ const People = ({ user }) => {
                 )}
                 <div className="border-t border-gray-100 my-1" />
                 <button
-                  onClick={() => { handleDelete(person); closeMenu(); }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition text-left"
+                  onClick={() => { if (person.id !== user?.personId) handleDelete(person); closeMenu(); }}
+                  disabled={person.id === user?.personId}
+                  className={'w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition text-left ' + (person.id === user?.personId ? 'opacity-40 cursor-not-allowed' : '')}
                 >
                   <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="3 6 5 6 21 6" />
@@ -335,6 +343,15 @@ const People = ({ user }) => {
           }}
         />
       )}
+
+      <PersonFormModal
+        isOpen={addOpen}
+        onClose={() => setAddOpen(false)}
+        onCreated={() => load()}
+        teams={teams}
+        people={people}
+        lockToLeadId={isLead ? user.personId : null}
+      />
     </div>
   );
 };
