@@ -3,6 +3,7 @@ const router = express.Router();
 const { loadData, saveData } = require('../lib/store');
 const { requireRole } = require('../middleware/auth');
 const { getVisiblePersonIds } = require('../lib/scope');
+const { getPool } = require('../lib/db');
 
 // ---------- Date helpers (week-based, ISO) ----------
 const toISODate = (d) => {
@@ -201,19 +202,26 @@ router.put('/people/:id', requireRole('boss', 'lead'), async (req, res) => {
     const index = data.people.findIndex(p => p.id === req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Person not found.' });
 
+    // Self-protection: nobody deactivates their own record
+    if (req.user.personId === req.params.id && req.body.status === 'inactive') {
+      return res.status(400).json({ error: 'You cannot deactivate yourself.' });
+    }
+
     // Leads can only manage people within their subtree
     const visible = await getVisiblePersonIds(req.user);
     if (visible && !visible.includes(req.params.id)) {
       return res.status(403).json({ error: 'You can only manage people within your team.' });
     }
 
-    // Role and reporting line are structural decisions — boss only
+    // Role, reporting line, and team are structural decisions — boss only.
+    // (Boss team changes cascade to the target's subtree below.)
     if (req.user.role === 'lead') {
       const changingRole = req.body.role !== undefined && req.body.role !== data.people[index].role;
       const changingManager = req.body.managerId !== undefined &&
         (req.body.managerId ?? null) !== (data.people[index].managerId ?? null);
-      if (changingRole || changingManager) {
-        return res.status(403).json({ error: 'Only the boss can change role or reporting line.' });
+      const changingTeam = req.body.team !== undefined && req.body.team.trim() !== data.people[index].team;
+      if (changingRole || changingManager || changingTeam) {
+        return res.status(403).json({ error: 'Only the boss can change role, reporting line, or team.' });
       }
     }
 
@@ -239,6 +247,7 @@ router.put('/people/:id', requireRole('boss', 'lead'), async (req, res) => {
     const hierarchyError = validateHierarchy(newRole, newManagerId, data);
     if (hierarchyError) return res.status(400).json({ error: hierarchyError });
 
+    const previousTeam = data.people[index].team;
     data.people[index] = {
       id: data.people[index].id,
       name: merged.name.trim(),
@@ -248,6 +257,27 @@ router.put('/people/:id', requireRole('boss', 'lead'), async (req, res) => {
       role: newRole,
       status: newStatus
     };
+
+    // Boss team changes cascade to the target's entire subtree,
+    // keeping the invariant that a subtree shares its lead's team
+    if (req.user.role === 'boss' && data.people[index].team !== previousTeam) {
+      const newTeam = data.people[index].team;
+      const affected = new Set([req.params.id]);
+      let grew = true;
+      while (grew) {
+        grew = false;
+        for (const p of data.people) {
+          if (p.managerId && affected.has(p.managerId) && !affected.has(p.id)) {
+            affected.add(p.id);
+            grew = true;
+          }
+        }
+      }
+      for (const p of data.people) {
+        if (affected.has(p.id)) p.team = newTeam;
+      }
+    }
+
     await saveData(data);
     res.json(data.people[index]);
   } catch (err) {
@@ -261,10 +291,22 @@ router.delete('/people/:id', requireRole('boss', 'lead'), async (req, res) => {
     const index = data.people.findIndex(p => p.id === req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Person not found.' });
 
+    // Self-protection: nobody deletes their own record
+    if (req.user.personId === req.params.id) {
+      return res.status(400).json({ error: 'You cannot delete your own record.' });
+    }
+
     // Leads can only delete people within their subtree
     const visible = await getVisiblePersonIds(req.user);
     if (visible && !visible.includes(req.params.id)) {
       return res.status(403).json({ error: 'You can only manage people within your team.' });
+    }
+
+    // A person with a login account must be removed via the Users page,
+    // which deletes both deliberately instead of cascade-orphaning access
+    const linked = await getPool().query('SELECT 1 FROM users WHERE person_id = $1', [req.params.id]);
+    if (linked.rowCount > 0) {
+      return res.status(409).json({ error: 'This person has a login account. Remove the account first from the Users page.' });
     }
 
     if (data.tasks.some(t => t.assigneeId === req.params.id)) {
@@ -309,11 +351,17 @@ router.get('/projects', async (req, res) => {
     }));
 
     // Non-boss users only see projects they own or that are referenced
-    // by tasks inside their visible scope (keeps Tasks/Dashboard names working)
+    // by tasks inside their visible scope, including unassigned tasks they created
+    // (keeps Tasks/Dashboard names working)
     const visible = await getVisiblePersonIds(req.user);
     if (visible) {
       const scopedProjectIds = new Set(
-        data.tasks.filter(t => t.assigneeId && visible.includes(t.assigneeId)).map(t => t.projectId)
+        data.tasks
+          .filter(t =>
+            (t.assigneeId && visible.includes(t.assigneeId)) ||
+            (!t.assigneeId && t.createdBy === req.user.personId)
+          )
+          .map(t => t.projectId)
       );
       enriched = enriched.filter(p =>
         p.ownerId === req.user.personId || scopedProjectIds.has(p.id)
