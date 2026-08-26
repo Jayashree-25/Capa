@@ -6,9 +6,14 @@ const NAV_ITEMS = [
   { label: 'People', path: '/people', roles: ['boss', 'lead'] },
   { label: 'Users', path: '/users', roles: ['boss'] },
   { label: 'Tasks', path: '/tasks', roles: ['boss', 'lead', 'engineer'] },
-  { label: 'Projects', path: '/projects', roles: ['boss', 'lead'] },
+  { label: 'Projects', path: '/projects', roles: ['boss', 'lead', 'engineer'] },
   { label: 'Organization', path: '/organization', roles: ['boss', 'lead'] }
 ];
+
+const labelFor = (item, role) => {
+  if (item.path === '/people' && role === 'engineer') return 'My Team';
+  return item.label;
+};
 
 const Sidebar = ({ user, onLogout, onNavigate }) => {
   const { pathname } = useLocation();
@@ -32,7 +37,7 @@ const Sidebar = ({ user, onLogout, onNavigate }) => {
               }`}
             >
               <span className={`w-1 h-4 rounded-full ${isActive ? 'bg-blue-600' : 'bg-transparent'}`} />
-              {item.label}
+              {labelFor(item, user.role)}
             </NavLink>
           );
         })}
