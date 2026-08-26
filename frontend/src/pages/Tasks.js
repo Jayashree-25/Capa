@@ -388,6 +388,7 @@ const TasksPage = ({ user }) => {
         projects={projects}
         currentMonday={toISO(todayMonday())}
         isBoss={isBoss}
+        allowUnassigned
       />
 
       {editTask && (
