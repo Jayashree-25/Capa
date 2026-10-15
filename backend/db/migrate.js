@@ -45,7 +45,7 @@ if (require.main === module) {
       return pool.end();
     })
     .catch(err => {
-      console.error('Migration failed:', err.message);
+      console.error('Migration failed:', err);
       process.exit(1);
     });
 }
